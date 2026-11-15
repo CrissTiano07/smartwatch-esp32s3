@@ -1,0 +1,12 @@
+# ESP-IDF
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+
+# Editor / SO
+.vscode/*
+!.vscode/settings.json
+.DS_Store
+Thumbs.db
