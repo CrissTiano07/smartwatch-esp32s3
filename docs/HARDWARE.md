@@ -1,0 +1,40 @@
+# HARDWARE — Waveshare ESP32-S3-Touch-AMOLED-2.06
+
+Fonte oficial: https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.06
+
+## Placa
+- SoC: ESP32-S3R8 · 8 MB PSRAM · 32 MB flash · microSD
+- Tela: AMOLED 2.06" 410×502, controlador CO5300 (QSPI) · touch FT3168
+- USB-C nativo (GPIO19/20) — gravação e log
+
+## Barramento I2C compartilhado — SCL GPIO14 · SDA GPIO15
+| Chip | Função | Endereço* | Interrupção |
+|------|--------|-----------|-------------|
+| AXP2101 | energia, carga, bateria | 0x34 | — |
+| PCF85063 | RTC (hora) | 0x51 | GPIO39 |
+| QMI8658 | IMU 6 eixos | 0x6A/0x6B | GPIO21 |
+| FT3168 | touch | 0x38 | GPIO38 |
+| ES8311 | codec de áudio (saída) | 0x18 | — |
+| ES7210 | ADC de microfones | 0x40 | — |
+
+\* **Endereços a confirmar no scan I2C da Fase 1.** Atualizar esta tabela com o resultado real.
+
+## Outros pinos
+| GPIO | Uso |
+|------|-----|
+| 13 | LCD_TE (sincronismo de tela) |
+| 16 | I2S_MCLK (ES8311/ES7210) |
+| 17 | SD_CS |
+| 0 | BOOT |
+
+Pinos QSPI da tela: **pendente** — copiar do esquemático/demo oficial na Fase 3.
+
+## Bibliotecas de referência
+- XPowersLib (AXP2101) — lewisxhe
+- SensorLib (PCF85063, QMI8658) — lewisxhe
+- Demo oficial Waveshare (ESP-IDF)
+
+## Lições do firmware antigo (v6.3)
+- E-Gauge do AXP2101 retorna 0% até um ciclo completo de carga/descarga → usar fallback por tensão (regs 0x30/0x31, ×1,1 mV)
+- Curva LiPo usada: 4200 mV=100% · 3700=50% · 3200=10% · 3000=0%
+- Crashes antigos: stack pequeno (4096→8192), `lv_malloc` em loop, fonte LVGL não habilitada, loop de retry do Wi-Fi
