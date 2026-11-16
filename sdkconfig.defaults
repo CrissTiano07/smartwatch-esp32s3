@@ -1,0 +1,12 @@
+# sdkconfig.defaults — configurações padrão do projeto (versionadas no Git).
+# O 'sdkconfig' completo é gerado a partir deste arquivo e NÃO vai para o Git.
+
+# Chip alvo.
+CONFIG_IDF_TARGET="esp32s3"
+
+# A placa só expõe a USB nativa do ESP32-S3 (USB-C, GPIO19/20).
+# Envia o log por ela, para aparecer na COM8 sem adaptador externo.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# Flash de 32 MB (docs/HARDWARE.md).
+CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
