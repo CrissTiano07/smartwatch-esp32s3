@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "permissions": {
+    "allow": [
+      "Bash(C:\\esp\\v5.5.3\\esp-idf\\export.bat:*)",
+      "Bash(export.bat:*)",
+      "Bash(idf.py.exe build:*)",
+      "Bash(idf.py build:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "PowerShell(C:\\esp\\v5.5.3\\esp-idf\\export.bat:*)",
+      "PowerShell(export.bat:*)",
+      "PowerShell(idf.py.exe build:*)",
+      "PowerShell(idf.py build:*)",
+      "PowerShell(git status:*)",
+      "PowerShell(git log:*)",
+      "PowerShell(git diff:*)",
+      "PowerShell(git show:*)",
+      "PowerShell(git branch:*)"
+    ]
+  }
+}

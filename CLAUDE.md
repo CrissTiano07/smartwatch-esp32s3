@@ -29,6 +29,12 @@ O dono do projeto (Cristiano) está **aprendendo firmware**. Ele precisa entende
 6. Na dúvida sobre hardware, consulte `HARDWARE.md`; se não estiver lá, pergunte ou peça um teste — não chute.
 7. Ao fim da sessão: atualize `docs/HANDOFF.md`. Decisão nova → registre em `docs/DECISIONS.md`.
 
+## Branches
+- Cada fase do `ROADMAP.md` tem a sua branch, nomeada `fase-N-nome` (ex.: `fase-2-rtc`).
+- **Nunca faça commit na `main`.** Todo trabalho acontece na branch da fase atual.
+- **Merge e push são feitos pelo Cristiano**, nunca pela IA.
+- A IA pode commitar na branch da fase (seguindo as regras de Commits abaixo), mas para por aí.
+
 ## Regras técnicas
 - Hora interna sempre em **UTC**; fuso só na exibição (`TZ="<-03>3"`, Fortaleza, sem horário de verão).
 - **PCF85063 é a fonte da verdade da hora.** Wi-Fi/NTP só corrige, depois desliga.
