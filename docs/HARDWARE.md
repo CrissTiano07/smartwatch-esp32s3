@@ -41,6 +41,16 @@ Pinos QSPI da tela: **pendente** — copiar do esquemático/demo oficial na Fase
 - Demo oficial Waveshare (ESP-IDF)
 
 ## Lições do firmware antigo (v6.3)
-- E-Gauge do AXP2101 retorna 0% até um ciclo completo de carga/descarga → usar fallback por tensão (regs 0x30/0x31, ×1,1 mV)
+- E-Gauge do AXP2101 (reg 0xA4) retorna 0% até um ciclo completo de carga/descarga → usar fallback por tensão (ver registradores abaixo)
 - Curva LiPo usada: 4200 mV=100% · 3700=50% · 3200=10% · 3000=0%
+- ~~A nota antiga "regs 0x30/0x31, ×1,1 mV" estava errada~~ (0x30 é controle do ADC, não leitura).
+
+## AXP2101 — registradores usados (fonte: driver Rockbox + XPowersLib)
+| Reg | Nome | Uso |
+|-----|------|-----|
+| 0x00 | STATUS1 | bit5 = VBUS ok (USB presente) · bit3 = bateria presente (*confirmar pelo log*) |
+| 0x01 | STATUS2 | bits 6:5 → 0 parado/cheio · 1 carregando · 2 descarregando |
+| 0x30 | ADC enable | bit0 = medição de VBAT. Sempre leitura-modificação-escrita |
+| 0x34/0x35 | VBAT H/L | 14 bits, **1 mV/unidade**: `((H & 0x3F) << 8) \| L` |
+| 0xA4 | Bateria % | E-Gauge; 0 até calibrar → fallback por tensão |
 - Crashes antigos: stack pequeno (4096→8192), `lv_malloc` em loop, fonte LVGL não habilitada, loop de retry do Wi-Fi

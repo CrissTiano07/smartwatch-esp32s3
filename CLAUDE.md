@@ -16,6 +16,8 @@ Prioridades, nesta ordem: **1) hora certa sem Wi-Fi · 2) bateria · 3) estabili
 - ESP-IDF **v5.5.3** em `C:\esp\v5.5.3\esp-idf`, Windows, porta **COM9** (USB nativa, VID_303A)
 - Todo terminal novo: `C:\esp\v5.5.3\esp-idf\export.bat` (a extensão ESP-IDF do VS Code não reconhece esta instalação)
 - Build/flash/monitor: `idf.py build` · `idf.py -p COM9 flash` · `idf.py -p COM9 monitor`
+- Sair do monitor (teclado ABNT2): **Ctrl+T** e depois **Ctrl+X** (o `Ctrl+]` padrão não funciona no ABNT2)
+- Cristiano faz flash e monitor no terminal dele; a IA só valida com `idf.py.exe build`
 
 ## Modo de trabalho (obrigatório)
 O dono do projeto (Cristiano) está **aprendendo firmware**. Ele precisa entender cada linha.
