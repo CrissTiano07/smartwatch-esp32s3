@@ -28,3 +28,9 @@ esp_err_t bsp_i2c_read_reg(i2c_master_dev_handle_t dev, uint8_t reg,
 
 // Escreve um byte 'val' no registrador 'reg'.
 esp_err_t bsp_i2c_write_reg(i2c_master_dev_handle_t dev, uint8_t reg, uint8_t val);
+
+// Escreve 'len' bytes de 'buf' a partir do registrador 'reg', tudo numa
+// transação só (burst). Útil para gravar vários registradores em sequência
+// sem o chip "virar" valores no meio — ex.: os 7 registradores de hora do RTC.
+esp_err_t bsp_i2c_write_regs(i2c_master_dev_handle_t dev, uint8_t reg,
+                             const uint8_t *buf, size_t len);

@@ -39,3 +39,15 @@ esp_err_t pcf85063_hora_valida(bool *valida);
 // Burst de leitura: se o relógio "virar" o segundo no meio, ainda assim
 // pegamos um instante coerente, não metade de antes e metade de depois.
 esp_err_t pcf85063_ler(pcf85063_hora_t *out);
+
+// Grava a hora (converte dec->BCD) nos 7 registradores numa transação só.
+// Como escreve o registrador de segundos com o bit OS = 0, a gravação já
+// marca a hora como válida. 'in' deve estar em UTC e no modo 24h.
+esp_err_t pcf85063_gravar(const pcf85063_hora_t *in);
+
+// Semeia o RTC com a hora de COMPILAÇÃO (convertida para UTC) quando ele
+// está inválido (flag OS = 1) — ou sempre, se CONFIG_RTC_FORCAR_SEMENTE
+// estiver ligado no menuconfig. É o jeito de ter uma hora inicial sem Wi-Fi;
+// o NTP da Fase 6 corrige o valor absoluto depois.
+// '*semeou' recebe true se chegou a gravar, false se confiou no RTC.
+esp_err_t pcf85063_semear_se_preciso(bool *semeou);

@@ -1,0 +1,21 @@
+# Opção de projeto para o RTC, visível no `idf.py menuconfig`.
+# .projbuild faz o menu aparecer no nível de cima do menuconfig.
+
+menu "RTC (PCF85063)"
+
+    config RTC_FORCAR_SEMENTE
+        bool "Forçar semeadura da hora de build (ignora a flag OS)"
+        default n
+        help
+            Normalmente a hora só é semeada (gravada a partir da hora de
+            compilação) quando o RTC indica hora inválida (flag OS = 1).
+
+            Com esta opção LIGADA, a hora de build é gravada mesmo com OS = 0.
+            Serve para sobrescrever uma hora errada que outro firmware tenha
+            deixado para trás (OS = 0 mas hora incorreta).
+
+            Uso: ligue esta opção, compile e grave, desligue de novo, compile
+            e grave outra vez. Deixe DESLIGADA no dia a dia, senão o relógio
+            volta para a hora de compilação a cada boot.
+
+endmenu

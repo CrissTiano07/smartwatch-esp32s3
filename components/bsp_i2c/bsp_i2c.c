@@ -5,6 +5,7 @@
  * (mutex) interna por barramento, então duas tasks podem chamar estas
  * funções sem uma atropelar a transação da outra.
  */
+#include <string.h>          // memcpy: montar o pacote de escrita em burst
 #include "bsp_i2c.h"
 #include "esp_log.h"
 
@@ -121,4 +122,19 @@ esp_err_t bsp_i2c_write_reg(i2c_master_dev_handle_t dev, uint8_t reg, uint8_t va
     // Escrita: primeiro byte = registrador, segundo = valor.
     uint8_t pacote[2] = { reg, val };
     return i2c_master_transmit(dev, pacote, sizeof(pacote), BSP_I2C_TIMEOUT_MS);
+}
+
+esp_err_t bsp_i2c_write_regs(i2c_master_dev_handle_t dev, uint8_t reg,
+                             const uint8_t *buf, size_t len)
+{
+    // Monta [reg, b0, b1, ...] num buffer na stack e manda numa transação só.
+    // 16 bytes de dados é folga de sobra para o que a placa precisa (o RTC
+    // usa 7). Se alguém pedir mais, recusamos em vez de estourar o buffer.
+    uint8_t pacote[1 + 16];
+    if (buf == NULL || len > sizeof(pacote) - 1) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    pacote[0] = reg;
+    memcpy(&pacote[1], buf, len);
+    return i2c_master_transmit(dev, pacote, len + 1, BSP_I2C_TIMEOUT_MS);
 }
