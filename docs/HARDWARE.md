@@ -58,3 +58,21 @@ Pinos QSPI da tela: **pendente** — copiar do esquemático/demo oficial na Fase
 
 Leitura real (2026-11-16, USB + bateria, cheia): `00=28 01=14 34=10 35=0E A4=64`
 → 4110 mV (±2 mV entre leituras) · 100% · VBUS sim · bateria sim · parado/cheio.
+
+## PCF85063 — registradores de hora (fonte: datasheet NXP PCF85063A)
+Endereço I2C **0x51** · INT no **GPIO39** (não usado ainda; reservado para alarme/wake nas fases de energia).
+Todos os registradores de hora estão em **BCD** (cada dígito decimal num nibble; ex.: 59 = `0x59`).
+
+| Reg | Campo | Bits úteis | Observação |
+|-----|-------|-----------|------------|
+| 0x04 | Segundos | 6:0 (BCD 00–59) | **bit7 = OS** (Oscillator Stop) |
+| 0x05 | Minutos | 6:0 (BCD 00–59) | |
+| 0x06 | Horas | 5:0 (BCD 00–23) | modo 24h (padrão do chip) |
+| 0x07 | Dias | 5:0 (BCD 01–31) | |
+| 0x08 | Dia da semana | 2:0 (0–6) | **não é BCD**; 0 = domingo (casa com `tm_wday`) |
+| 0x09 | Mês | 4:0 (BCD 01–12) | |
+| 0x0A | Ano | 7:0 (BCD 00–99) | offset 2000 no firmware |
+
+- 0x04–0x0A são contíguos → lidos/gravados em **uma transação I2C (burst)**, para não pegar/gravar um instante partido na virada do segundo.
+- **Flag OS (bit7 de 0x04):** `1` = oscilador parou (ex.: faltou energia) → hora **não confiável**; `0` = hora válida. Fica em 1 até o software zerar. Gravar os segundos com bit7=0 já zera. Reset do ESP32 **não** mexe no RTC (alimentação própria), então após reset o OS continua 0 e a hora segue.
+- Modo 24h é o padrão do chip (bit 12/24 de Control_1 = 0). Se outro firmware tiver deixado em 12h, a leitura das horas sairia errada — não observado nesta placa; investigar só se aparecer.

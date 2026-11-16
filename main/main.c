@@ -1,8 +1,9 @@
 /*
- * main.c — Fase 1: barramento I2C + AXP2101.
+ * main.c — Fase 2: barramento I2C + AXP2101 + RTC PCF85063.
  *
- * Critério de aceite: o scan lista os chips e o log mostra
- * tensão e % da bateria a cada 5 s.
+ * Critério de aceite da Fase 2: grava a hora, reinicia e a hora continua
+ * certa no log (e marcada como válida), sem Wi-Fi. A bateria segue sendo
+ * logada da Fase 1.
  */
 
 #include <inttypes.h>            // PRIu32/PRIu64: imprimir inteiros de tamanho fixo no printf
@@ -15,6 +16,7 @@
 #include "esp_timer.h"           // esp_timer_get_time: microssegundos desde o boot
 #include "bsp_i2c.h"             // nosso barramento I2C compartilhado
 #include "axp2101.h"             // nosso driver do chip de energia
+#include "pcf85063.h"            // nosso driver do RTC (hora)
 
 // Etiqueta que aparece no começo de cada linha de log: "I (123) main: ..."
 // Ajuda a saber de qual módulo veio a mensagem quando o projeto crescer.
@@ -44,9 +46,18 @@ void app_main(void)
     // Se algo falhar, NÃO reiniciamos: seguimos no laço para o erro
     // ficar visível no monitor (um reboot em loop esconderia a causa).
     bool axp_ok = false;
+    bool rtc_ok = false;
     if (bsp_i2c_init() == ESP_OK) {
         bsp_i2c_scan();
         axp_ok = (axp2101_init() == ESP_OK);
+
+        // RTC: registra o chip e, se a hora estiver inválida (ou se a opção
+        // RTC_FORCAR_SEMENTE estiver ligada), semeia com a hora de build.
+        rtc_ok = (pcf85063_init() == ESP_OK);
+        if (rtc_ok) {
+            bool semeou = false;
+            pcf85063_semear_se_preciso(&semeou);
+        }
     }
 
     // --- Batimento: prova que o programa continua vivo ---
@@ -71,6 +82,21 @@ void app_main(void)
                          bat.raw_vbat_h, bat.raw_vbat_l, bat.raw_gauge);
             } else {
                 ESP_LOGW(TAG, "axp2101_read falhou: %s", esp_err_to_name(err));
+            }
+        }
+
+        if (rtc_ok) {
+            pcf85063_hora_t h;   // na stack: sem malloc no laço
+            bool valida = false;
+            esp_err_t e1 = pcf85063_ler(&h);
+            esp_err_t e2 = pcf85063_hora_valida(&valida);
+            if (e1 == ESP_OK && e2 == ESP_OK) {
+                // Formato ISO, sempre UTC (o fuso entra só na tela, na Fase 3).
+                ESP_LOGI(TAG, "RTC: %04u-%02u-%02u %02u:%02u:%02u UTC (%s)",
+                         h.ano, h.mes, h.dia, h.hora, h.min, h.seg,
+                         valida ? "válida" : "INVÁLIDA");
+            } else {
+                ESP_LOGW(TAG, "leitura do RTC falhou");
             }
         }
 

@@ -11,3 +11,4 @@ Formato: data · decisão · motivo. Não reabrir sem fato novo.
 | 5 | 2026-11-15 | PCF85063 é a fonte da verdade da hora; Wi-Fi só corrige | Relógio não pode depender de rede |
 | 6 | 2026-11-15 | Sem OTA | Complexidade desnecessária; USB-C nativo basta |
 | 7 | 2026-11-15 | Hora interna em UTC; fuso só na exibição | Evita bugs de fuso |
+| 8 | 2026-11-16 | Semear o RTC com a hora de compilação (convertida p/ UTC) quando OS=1 | Dá uma hora inicial sem Wi-Fi; NTP corrige na Fase 6. Opção `RTC_FORCAR_SEMENTE` força mesmo com OS=0, p/ sobrescrever hora errada deixada por outro firmware |
