@@ -14,16 +14,17 @@ Fonte oficial: https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.06
 - Gravar com placa travada: segurar BOOT e conectar o cabo
 
 ## Barramento I2C compartilhado — SCL GPIO14 · SDA GPIO15
-| Chip | Função | Endereço* | Interrupção |
-|------|--------|-----------|-------------|
-| AXP2101 | energia, carga, bateria | 0x34 | — |
-| PCF85063 | RTC (hora) | 0x51 | GPIO39 |
-| QMI8658 | IMU 6 eixos | 0x6A/0x6B | GPIO21 |
-| FT3168 | touch | 0x38 | GPIO38 |
-| ES8311 | codec de áudio (saída) | 0x18 | — |
-| ES7210 | ADC de microfones | 0x40 | — |
+| Chip | Função | Endereço | Scan 2026-11-16 | Interrupção |
+|------|--------|----------|-----------------|-------------|
+| AXP2101 | energia, carga, bateria | 0x34 | ✅ | — |
+| PCF85063 | RTC (hora) | 0x51 | ✅ | GPIO39 |
+| QMI8658 | IMU 6 eixos | **0x6B** | ✅ (0x6A não responde) | GPIO21 |
+| FT3168 | touch | 0x38 | ❌ não respondeu | GPIO38 |
+| ES8311 | codec de áudio (saída) | 0x18 | ✅ | — |
+| ES7210 | ADC de microfones | 0x40 | ✅ | — |
 
-\* **Endereços a confirmar no scan I2C da Fase 1.** Atualizar esta tabela com o resultado real.
+FT3168 ausente no scan: provável sono/reset do controlador de touch (**não verificado**).
+Investigar na fase do touch — ver pino de reset no esquemático/demo oficial.
 
 ## Outros pinos
 | GPIO | Uso |
@@ -41,16 +42,19 @@ Pinos QSPI da tela: **pendente** — copiar do esquemático/demo oficial na Fase
 - Demo oficial Waveshare (ESP-IDF)
 
 ## Lições do firmware antigo (v6.3)
-- E-Gauge do AXP2101 (reg 0xA4) retorna 0% até um ciclo completo de carga/descarga → usar fallback por tensão (ver registradores abaixo)
+- E-Gauge do AXP2101 (reg 0xA4) retorna 0% até um ciclo completo de carga/descarga → usar fallback por tensão (ver registradores abaixo). Nesta placa, em 2026-11-16, já retornava 100% (calibrado).
 - Curva LiPo usada: 4200 mV=100% · 3700=50% · 3200=10% · 3000=0%
 - ~~A nota antiga "regs 0x30/0x31, ×1,1 mV" estava errada~~ (0x30 é controle do ADC, não leitura).
+- Crashes antigos: stack pequeno (4096→8192), `lv_malloc` em loop, fonte LVGL não habilitada, loop de retry do Wi-Fi
 
 ## AXP2101 — registradores usados (fonte: driver Rockbox + XPowersLib)
 | Reg | Nome | Uso |
 |-----|------|-----|
-| 0x00 | STATUS1 | bit5 = VBUS ok (USB presente) · bit3 = bateria presente (*confirmar pelo log*) |
+| 0x00 | STATUS1 | bit5 = VBUS ok (USB presente) · bit3 = bateria presente (coerente no log; não testado sem bateria) |
 | 0x01 | STATUS2 | bits 6:5 → 0 parado/cheio · 1 carregando · 2 descarregando |
-| 0x30 | ADC enable | bit0 = medição de VBAT. Sempre leitura-modificação-escrita |
+| 0x30 | ADC enable | bit0 = medição de VBAT. Sempre leitura-modificação-escrita. Padrão no boot: 0x03 |
 | 0x34/0x35 | VBAT H/L | 14 bits, **1 mV/unidade**: `((H & 0x3F) << 8) \| L` |
 | 0xA4 | Bateria % | E-Gauge; 0 até calibrar → fallback por tensão |
-- Crashes antigos: stack pequeno (4096→8192), `lv_malloc` em loop, fonte LVGL não habilitada, loop de retry do Wi-Fi
+
+Leitura real (2026-11-16, USB + bateria, cheia): `00=28 01=14 34=10 35=0E A4=64`
+→ 4110 mV (±2 mV entre leituras) · 100% · VBUS sim · bateria sim · parado/cheio.
