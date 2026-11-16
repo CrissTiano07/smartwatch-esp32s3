@@ -11,6 +11,8 @@
 - ESP-IDF v5.5.3 recuperado (`install.bat esp32s3`); `idf.py --version` → v5.5.3 ✅
 - **Fase 0 concluída:** build + flash + monitor; log "boot ok" e batimento a cada 5 s ✅
 - **Fase 1 concluída:** componentes `bsp_i2c` e `axp2101`. Na placa: scan achou 0x18, 0x34, 0x40, 0x51, 0x6B; bateria 4110 mV, 100% (gauge), USB sim, parado/cheio ✅
+- **Fase 2 codificada (aguardando teste na placa):** componente `pcf85063` (0x51). Lê/grava hora em UTC (burst, BCD), usa a flag OS como "hora válida?", semeia pela hora de build quando OS=1. `main.c` loga `RTC: ... UTC (válida/INVÁLIDA)` a cada 5 s. Build ✅ (validado com `idf.py.exe build`).
+- Config: `.claude/settings.json` libera build e gits de leitura sem prompt; CLAUDE.md ganhou seção "Branches".
 
 ## Como abrir o ambiente (todo terminal novo)
 ```
@@ -18,9 +20,14 @@ C:\esp\v5.5.3\esp-idf\export.bat
 ```
 Depois: `idf.py build` · `idf.py -p COM9 flash` · `idf.py -p COM9 monitor`
 
-## Próximo passo
-1. (Opcional, rápido) Rodar só na bateria, sem USB, e conferir no log: bit5 de 0x00 = 0 e STATUS2 = "descarregando"
-2. Fase 2: módulo `pcf85063` (0x51) — ler/gravar hora em UTC, sobreviver a reset
+## Próximo passo (testar Fase 2 na placa)
+1. `idf.py -p COM9 flash monitor`. No 1º boot após falta de energia, o log deve mostrar `hora semeada da build (...)` e depois `RTC: ... UTC (válida)` a cada 5 s.
+2. **Reset** (botão RST ou `Ctrl+T Ctrl+R`): a hora deve continuar andando e seguir `válida` — isso cumpre o critério de aceite.
+3. Se a hora estiver errada (outro firmware deixou OS=0 com hora ruim): `idf.py menuconfig` → "RTC (PCF85063)" → ligar **RTC_FORCAR_SEMENTE** → flash (grava a hora de build) → desligar a opção → flash de novo. Daí em diante o RTC manda.
+4. Com o critério cumprido na placa, marcar Fase 2 ✅ no ROADMAP e seguir para a Fase 3 (tela + LVGL).
+
+## Como a IA roda o build nesta máquina
+`idf.py.exe build` pela ferramenta **PowerShell** (no Git Bash, `cmd /c` sofre path-mangling do MSYS e abre cmd interativo). Flash/monitor seguem com o Cristiano.
 
 ## Bloqueios / dúvidas abertas
 - Capacidade real da bateria (400 mAh?)
