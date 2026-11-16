@@ -1,8 +1,8 @@
 /*
- * main.c — Fase 0: prova de vida do firmware.
+ * main.c — Fase 1: barramento I2C + AXP2101.
  *
- * Objetivo: confirmar que compilar → gravar → ver log funciona.
- * Critério de aceite: aparecer "boot ok" no monitor serial.
+ * Critério de aceite: o scan lista os chips e o log mostra
+ * tensão e % da bateria a cada 5 s.
  */
 
 #include <inttypes.h>            // PRIu32/PRIu64: imprimir inteiros de tamanho fixo no printf
@@ -13,6 +13,8 @@
 #include "esp_flash.h"           // esp_flash_get_size: tamanho da memória flash
 #include "esp_system.h"          // esp_get_free_heap_size, esp_get_idf_version
 #include "esp_timer.h"           // esp_timer_get_time: microssegundos desde o boot
+#include "bsp_i2c.h"             // nosso barramento I2C compartilhado
+#include "axp2101.h"             // nosso driver do chip de energia
 
 // Etiqueta que aparece no começo de cada linha de log: "I (123) main: ..."
 // Ajuda a saber de qual módulo veio a mensagem quando o projeto crescer.
@@ -38,11 +40,39 @@ void app_main(void)
     ESP_LOGI(TAG, "ESP-IDF: %s", esp_get_idf_version());
     ESP_LOGI(TAG, "heap livre: %" PRIu32 " bytes", esp_get_free_heap_size());
 
+    // --- I2C: barramento primeiro, depois quem está nele ---
+    // Se algo falhar, NÃO reiniciamos: seguimos no laço para o erro
+    // ficar visível no monitor (um reboot em loop esconderia a causa).
+    bool axp_ok = false;
+    if (bsp_i2c_init() == ESP_OK) {
+        bsp_i2c_scan();
+        axp_ok = (axp2101_init() == ESP_OK);
+    }
+
     // --- Batimento: prova que o programa continua vivo ---
     while (1) {
         // esp_timer_get_time() devolve microssegundos (int64). /1.000.000 = segundos.
         uint64_t segundos = esp_timer_get_time() / 1000000ULL;
         ESP_LOGI(TAG, "vivo há %" PRIu64 " s", segundos);
+
+        if (axp_ok) {
+            axp2101_info_t bat;  // na stack da task: sem malloc no laço
+            esp_err_t err = axp2101_read(&bat);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "bat: %u mV, %u%% (%s) | usb %s | bat %s | %s",
+                         bat.vbat_mv, bat.pct,
+                         bat.pct_por_tensao ? "tensão" : "gauge",
+                         bat.vbus_ok ? "sim" : "não",
+                         bat.bat_presente ? "sim" : "não",
+                         axp2101_chg_str(bat.carga));
+                // Bytes crus: conferir bits contra docs/HARDWARE.md.
+                ESP_LOGI(TAG, "raw: 00=%02X 01=%02X 34=%02X 35=%02X A4=%02X",
+                         bat.raw_status1, bat.raw_status2,
+                         bat.raw_vbat_h, bat.raw_vbat_l, bat.raw_gauge);
+            } else {
+                ESP_LOGW(TAG, "axp2101_read falhou: %s", esp_err_to_name(err));
+            }
+        }
 
         // Pausa 5 s. pdMS_TO_TICKS converte milissegundos em "ticks" do FreeRTOS.
         // Diferente de um loop vazio, vTaskDelay libera o processador (economiza energia).
