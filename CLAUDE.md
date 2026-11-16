@@ -38,6 +38,17 @@ O dono do projeto (Cristiano) está **aprendendo firmware**. Ele precisa entende
 - Wi-Fi desligado por padrão.
 - Textos na tela: curtos.
 
+## Comandos de risco
+Antes de rodar qualquer comando com `del`/`rm`/`rmdir`, `git push`, `git reset`
+ou caminho **fora da pasta do projeto**: pare, explique o risco em 1 linha e
+só então peça aprovação.
+
+## Fim de sessão (obrigatório)
+1. Liste os commits da sessão (`git log --oneline`), com uma linha explicando cada um.
+2. Liste cada comando executado e por quê. Destaque qualquer um que tenha alterado algo fora da pasta do projeto.
+3. Atualize `docs/HANDOFF.md`.
+4. Diga quais commits o Cristiano deve revisar com `git show`.
+
 ## Commits
 Formato: `tipo(escopo): resumo` — tipos: `feat`, `fix`, `docs`, `refactor`, `chore`, `test`.
 Exemplo: `feat(rtc): lê e grava hora no PCF85063`
