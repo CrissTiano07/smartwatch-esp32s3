@@ -11,6 +11,6 @@ Hora mantida pelo RTC, sem depender de Wi-Fi. Foco em bateria.
 ## Build
 ```
 idf.py build
-idf.py -p COM8 flash
-idf.py -p COM8 monitor
+idf.py -p COM9 flash
+idf.py -p COM9 monitor
 ```

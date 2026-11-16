@@ -5,7 +5,13 @@ Fonte oficial: https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.06
 ## Placa
 - SoC: ESP32-S3R8 · 8 MB PSRAM · 32 MB flash · microSD
 - Tela: AMOLED 2.06" 410×502, controlador CO5300 (QSPI) · touch FT3168
-- USB-C nativo (GPIO19/20) — gravação e log
+- USB-C nativo (GPIO19/20) — gravação e log · aparece como **COM9** (VID_303A)
+
+## Confirmado no 1º boot (2026-11-16)
+- ESP32-S3 (QFN56) rev v0.2 · 2 núcleos · cristal 40 MHz
+- Flash 32 MB (chip GD) · PSRAM 8 MB detectada pelo esptool
+- PSRAM **ainda não habilitada** no sdkconfig → necessária para LVGL (Fase 3)
+- Gravar com placa travada: segurar BOOT e conectar o cabo
 
 ## Barramento I2C compartilhado — SCL GPIO14 · SDA GPIO15
 | Chip | Função | Endereço* | Interrupção |

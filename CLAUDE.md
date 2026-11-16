@@ -13,8 +13,9 @@ Prioridades, nesta ordem: **1) hora certa sem Wi-Fi · 2) bateria · 3) estabili
 - Estado atual / próximo passo: `docs/HANDOFF.md`
 
 ## Ambiente
-- ESP-IDF **v5.5.3**, VS Code + extensão ESP-IDF, Windows, porta **COM8**
-- Build/flash/monitor: `idf.py build` · `idf.py -p COM8 flash` · `idf.py -p COM8 monitor`
+- ESP-IDF **v5.5.3** em `C:\esp\v5.5.3\esp-idf`, Windows, porta **COM9** (USB nativa, VID_303A)
+- Todo terminal novo: `C:\esp\v5.5.3\esp-idf\export.bat` (a extensão ESP-IDF do VS Code não reconhece esta instalação)
+- Build/flash/monitor: `idf.py build` · `idf.py -p COM9 flash` · `idf.py -p COM9 monitor`
 
 ## Modo de trabalho (obrigatório)
 O dono do projeto (Cristiano) está **aprendendo firmware**. Ele precisa entender cada linha.
