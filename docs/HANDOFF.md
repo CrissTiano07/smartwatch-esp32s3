@@ -3,7 +3,7 @@
 > Atualizar ao **fim de cada sessão**. Primeira coisa que a IA lê, junto com `CLAUDE.md`.
 
 **Última atualização:** 2026-11-16
-**Fase atual:** 2 — RTC PCF85063
+**Fase atual:** 2 concluída ✅ → próxima: 3 (tela + LVGL)
 
 ## Feito
 - Documentação inicial: CLAUDE.md, SPEC, HARDWARE, ROADMAP, DECISIONS, HANDOFF
@@ -11,7 +11,7 @@
 - ESP-IDF v5.5.3 recuperado (`install.bat esp32s3`); `idf.py --version` → v5.5.3 ✅
 - **Fase 0 concluída:** build + flash + monitor; log "boot ok" e batimento a cada 5 s ✅
 - **Fase 1 concluída:** componentes `bsp_i2c` e `axp2101`. Na placa: scan achou 0x18, 0x34, 0x40, 0x51, 0x6B; bateria 4110 mV, 100% (gauge), USB sim, parado/cheio ✅
-- **Fase 2 codificada (aguardando teste na placa):** componente `pcf85063` (0x51). Lê/grava hora em UTC (burst, BCD), usa a flag OS como "hora válida?", semeia pela hora de build quando OS=1. `main.c` loga `RTC: ... UTC (válida/INVÁLIDA)` a cada 5 s. Build ✅ (validado com `idf.py.exe build`).
+- **Fase 2 concluída:** componente `pcf85063` (0x51). Lê/grava hora em UTC (burst, BCD), usa a flag OS como "hora válida?", semeia pela hora de build quando OS=1. `main.c` loga `RTC: ... UTC (válida/INVÁLIDA)` a cada 5 s. Na placa (2026-11-16): após desligar `RTC_FORCAR_SEMENTE` e regravar → `hora válida no RTC; não semeia` e `RTC: 2026-11-16 17:32:27 UTC (válida)` (compilado 14:31:57 local = 17:31:57 UTC; diferença = tempo de gravar/bootar). Sobrevive a reset ✅
 - Config: `.claude/settings.json` libera build e gits de leitura sem prompt; CLAUDE.md ganhou seção "Branches".
 
 ## Como abrir o ambiente (todo terminal novo)
@@ -20,11 +20,18 @@ C:\esp\v5.5.3\esp-idf\export.bat
 ```
 Depois: `idf.py build` · `idf.py -p COM9 flash` · `idf.py -p COM9 monitor`
 
-## Próximo passo (testar Fase 2 na placa)
-1. `idf.py -p COM9 flash monitor`. No 1º boot após falta de energia, o log deve mostrar `hora semeada da build (...)` e depois `RTC: ... UTC (válida)` a cada 5 s.
-2. **Reset** (botão RST ou `Ctrl+T Ctrl+R`): a hora deve continuar andando e seguir `válida` — isso cumpre o critério de aceite.
-3. Se a hora estiver errada (outro firmware deixou OS=0 com hora ruim): `idf.py menuconfig` → "RTC (PCF85063)" → ligar **RTC_FORCAR_SEMENTE** → flash (grava a hora de build) → desligar a opção → flash de novo. Daí em diante o RTC manda.
-4. Com o critério cumprido na placa, marcar Fase 2 ✅ no ROADMAP e seguir para a Fase 3 (tela + LVGL).
+## Acertar a hora manualmente (RTC_FORCAR_SEMENTE)
+Quando o RTC guarda uma hora errada mas marcada como válida (OS=0, ex.: resquício de outro firmware), a semeadura automática não roda. Para forçar:
+1. `idf.py menuconfig` → **"RTC (PCF85063)"** → **ligar** `RTC_FORCAR_SEMENTE`.
+2. `idf.py -p COM9 flash` — grava a hora de compilação no RTC (log: `hora semeada da build (forçada)`).
+3. `idf.py menuconfig` → **desligar** `RTC_FORCAR_SEMENTE`.
+4. `idf.py -p COM9 flash` de novo — a partir daqui o RTC manda e a hora só anda (log: `hora válida no RTC; não semeia`).
+> Deixe a opção SEMPRE desligada no dia a dia; ligada, o relógio volta à hora de compilação a cada boot.
+> A semente nasce alguns segundos atrasada (tempo de compilar/gravar). O NTP da Fase 6 corrige o valor absoluto.
+
+## Próximo passo
+- **Fase 3:** tela AMOLED (CO5300, QSPI) + LVGL mínimo → relógio digital HH:MM vindo do RTC.
+- Antes: habilitar PSRAM no sdkconfig (necessária para LVGL — ver nota na seção "Confirmado no 1º boot" do HARDWARE.md) e pegar os pinos QSPI da tela no esquemático/demo oficial da Waveshare.
 
 ## Como a IA roda o build nesta máquina
 `idf.py.exe build` pela ferramenta **PowerShell** (no Git Bash, `cmd /c` sofre path-mangling do MSYS e abre cmd interativo). Flash/monitor seguem com o Cristiano.
