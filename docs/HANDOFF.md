@@ -2,8 +2,8 @@
 
 > Atualizar ao **fim de cada sessão**. Primeira coisa que a IA lê, junto com `CLAUDE.md`.
 
-**Última atualização:** 2026-11-16
-**Fase atual:** 3 em andamento 🟨 (tela + LVGL) — Passo 1 (PSRAM) validado na placa
+**Última atualização:** 2026-11-17
+**Fase atual:** 3 concluída ✅ (tela + LVGL, relógio HH:MM na placa) → próxima: 4 (estados de energia)
 
 ## Feito
 - Documentação inicial: CLAUDE.md, SPEC, HARDWARE, ROADMAP, DECISIONS, HANDOFF
@@ -13,7 +13,12 @@
 - **Fase 1 concluída:** componentes `bsp_i2c` e `axp2101`. Na placa: scan achou 0x18, 0x34, 0x40, 0x51, 0x6B; bateria 4110 mV, 100% (gauge), USB sim, parado/cheio ✅
 - **Fase 2 concluída:** componente `pcf85063` (0x51). Lê/grava hora em UTC (burst, BCD), usa a flag OS como "hora válida?", semeia pela hora de build quando OS=1. `main.c` loga `RTC: ... UTC (válida/INVÁLIDA)` a cada 5 s. Na placa (2026-11-16): após desligar `RTC_FORCAR_SEMENTE` e regravar → `hora válida no RTC; não semeia` e `RTC: 2026-11-16 17:32:27 UTC (válida)` (compilado 14:31:57 local = 17:31:57 UTC; diferença = tempo de gravar/bootar). Sobrevive a reset ✅
 - Config: `.claude/settings.json` libera build e gits de leitura sem prompt; CLAUDE.md ganhou seção "Branches".
-- **Fase 3 — Passo 1 (PSRAM) concluído:** `CONFIG_SPIRAM` em modo OCT a 80 MHz no `sdkconfig.defaults` (ESP32-S3R8). Na placa (2026-11-16): `Found 8MB PSRAM device`, `SPI SRAM memory test OK`, `main: PSRAM: 8388608 bytes (8 MB)` ✅. `main` ganhou `REQUIRES` explícito.
+- **Fase 3 concluída ✅ (tela AMOLED CO5300 + LVGL, relógio HH:MM):**
+  - **Passo 1 (PSRAM):** `CONFIG_SPIRAM` em modo OCT a 80 MHz no `sdkconfig.defaults` (ESP32-S3R8). Na placa: `Found 8MB PSRAM device`, `SPI SRAM memory test OK`, `PSRAM: 8388608 bytes` ✅. `main` ganhou `REQUIRES` explícito.
+  - **Passo 2 (tela):** componente `bsp_display` — barramento QSPI (SPI2), painel SH8601 com a init oficial da Waveshare, `set_gap(22,0)`, preenchimento em faixas sem malloc. Vermelho puro na placa ✅ (ordem de bytes RGB565 BE confirmada). Dep `waveshare/esp_lcd_sh8601 ==2.0.0`.
+  - **Passo 3 (LVGL):** `esp_lvgl_port ==2.9.0` + `lvgl ==9.5.0`, task stack 8192, buffers RGB565 na RAM interna com DMA. Texto fixo "Smartwatch ok" ✅. Correções: `rounder_event_cb` (alinhamento 2 px — tirou o texto inclinado) e `sw_rotate=true` (tirou o erro `swap_xy`).
+  - **Passo 4 (relógio):** `main` converte a hora UTC do RTC para Fortaleza (`TZ=<-03>3`, `epoch_de_utc()` supre a falta de `timegm()`) e mostra HH:MM, atualizando quando o minuto vira. Na placa (2026-11-17): HH:MM certo de Fortaleza, centralizado, minuto virando ✅.
+  - **Medição (heap após subir o LVGL):** interno **175563 B** · PSRAM **8385028 B**.
 
 ## Como abrir o ambiente (todo terminal novo)
 ```
@@ -31,8 +36,8 @@ Quando o RTC guarda uma hora errada mas marcada como válida (OS=0, ex.: resquí
 > A semente nasce alguns segundos atrasada (tempo de compilar/gravar). O NTP da Fase 6 corrige o valor absoluto.
 
 ## Próximo passo
-- **Fase 3, Passo 2:** inicializar a tela (CO5300 via driver `esp_lcd_sh8601`, QSPI) e pintá-la de **vermelho puro** (teste da ordem de bytes RGB565 BE). Pinos confirmados em HARDWARE.md.
-- Depois: Passo 3 (LVGL + texto fixo) e Passo 4 (HH:MM do RTC em horário de Fortaleza, atualizando a cada minuto).
+- **Fase 4 — estados de energia:** tela apaga por timeout; botão/toque acende. Ver critério no ROADMAP.
+- Oportunidades já mapeadas para a Fase 5 (ver "Notas da sessão").
 
 ## Como a IA roda o build nesta máquina
 `idf.py.exe build` pela ferramenta **PowerShell** (no Git Bash, `cmd /c` sofre path-mangling do MSYS e abre cmd interativo). Flash/monitor seguem com o Cristiano.
@@ -52,6 +57,8 @@ Quando o RTC guarda uma hora errada mas marcada como válida (OS=0, ex.: resquí
 - `C:\Espressif\tools\python_old`
 
 ## Notas da sessão
+- 2026-11-17: tela ~1 min atrasada vs. notebook. **Esperado:** a semente do RTC é a hora de compilação (atraso do compilar/gravar/bootar). Correção é a **Fase 6 (NTP)**, que acerta o valor absoluto e grava no RTC. Não é bug do relógio.
+- 2026-11-17: **(para a Fase 5)** trocar o polling do relógio (hoje o laço lê o RTC a cada 5 s) pela **interrupção de minuto do PCF85063 no GPIO39** — acorda só quando o minuto vira. Casa com "nada de polling quando existe interrupção" (CLAUDE.md) e economiza bateria.
 - 2026-11-16: **(para a Fase 5 — energia/boot)** o teste de memória da PSRAM (`CONFIG_SPIRAM_MEMTEST`, ligado por padrão) adiciona ~430 ms ao boot. Avaliar desligar para acelerar o boot quando a estabilidade da PSRAM já estiver confirmada.
 - 2026-11-16: VS Code com extensão ESP-IDF instalada; Restricted Mode precisa de "Trust"
 - 2026-11-16: placa é COM9 (COM8 era outro dispositivo)
