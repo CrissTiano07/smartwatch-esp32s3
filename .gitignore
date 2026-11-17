@@ -3,7 +3,8 @@ build/
 managed_components/
 sdkconfig
 sdkconfig.old
-dependencies.lock
+# dependencies.lock NÃO é ignorado de propósito: ele fixa as versões exatas
+# dos componentes gerenciados (reprodutibilidade do build). Fica versionado.
 
 # Editor / SO
 .vscode/*
