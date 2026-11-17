@@ -28,12 +28,25 @@
 // Ajuda a saber de qual módulo veio a mensagem quando o projeto crescer.
 static const char *TAG = "main";
 
-// Callback do botão BOOT. Roda na task do bsp_button (não na ISR), então
-// aqui é seguro logar. Por enquanto só prova que a interrupção chegou; nas
-// próximas etapas da Fase 4 este clique vai acordar a tela.
+// Estado da tela para o teste do Passo 2 (alternar com o botão).
+static bool s_tela_dormindo = false;
+
+// Callback do botão BOOT. Roda na task do bsp_button (não na ISR), então aqui
+// é seguro logar e mexer na tela (inclusive com os 120 ms de espera do wake).
+// Passo 2: cada clique ALTERNA a tela entre dormindo e acordada, só para
+// validar sleep/wake na placa. No Passo 3 isto muda: o timeout apaga e o
+// botão apenas acende.
 static void ao_clicar_botao(void)
 {
-    ESP_LOGI(TAG, "botão: clique");
+    if (s_tela_dormindo) {
+        bsp_display_wake();
+        s_tela_dormindo = false;
+    } else {
+        bsp_display_sleep();
+        s_tela_dormindo = true;
+    }
+    ESP_LOGI(TAG, "botão: clique -> tela %s",
+             s_tela_dormindo ? "dormindo" : "acordada");
 }
 
 // Converte uma data do calendário (UTC) em "epoch" = segundos desde

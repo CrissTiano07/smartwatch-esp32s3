@@ -13,6 +13,14 @@
 #include "esp_log.h"
 #include "esp_lvgl_port.h"         // port oficial: liga o LVGL ao painel esp_lcd
 #include "lvgl.h"                  // API gráfica (label, cores, fontes)
+#include "freertos/FreeRTOS.h"     // base do RTOS (antes de task.h)
+#include "freertos/task.h"         // vTaskDelay: esperar o painel estabilizar no wake
+
+// Comandos de sleep do painel (padrão MIPI, iguais no SH8601/CO5300). O driver
+// não os expõe pela API esp_lcd, então os enviamos direto pelo IO do painel —
+// do mesmo jeito que a sequência de init manda o 0x11 (sleep-out).
+#define LCD_CMD_SLPIN  0x10        // sleep in:  painel entra em repouso
+#define LCD_CMD_SLPOUT 0x11        // sleep out: painel sai do repouso
 
 static const char *TAG = "bsp_display";
 
@@ -225,4 +233,50 @@ esp_err_t bsp_display_set_text(const char *txt)
     lv_obj_center(s_label);            // recentraliza (o tamanho pode mudar)
     lvgl_port_unlock();
     return ESP_OK;
+}
+
+esp_err_t bsp_display_sleep(void)
+{
+    if (s_panel == NULL || s_io == NULL) {
+        return ESP_ERR_INVALID_STATE;  // a tela não subiu
+    }
+    // Trava o LVGL durante a troca de estado para não disputar o barramento
+    // com um flush da task do LVGL. (A PAUSA completa do LVGL vem no Passo 3;
+    // aqui só serializamos o acesso ao painel.)
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
+    }
+    // 1) Desliga a saída (pixels apagam). 2) Manda o painel dormir.
+    esp_err_t err = esp_lcd_panel_disp_on_off(s_panel, false);          // DISPOFF (0x28)
+    if (err == ESP_OK) {
+        err = esp_lcd_panel_io_tx_param(s_io, LCD_CMD_SLPIN, NULL, 0);  // SLPIN (0x10)
+    }
+    lvgl_port_unlock();
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "tela dormindo (display off + sleep)");
+    }
+    return err;
+}
+
+esp_err_t bsp_display_wake(void)
+{
+    if (s_panel == NULL || s_io == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
+    }
+    // 1) Acorda o painel. O oscilador/booster precisam de ~120 ms para
+    //    estabilizar antes de religar a saída — mesmo atraso que o init usa
+    //    depois do 0x11. 2) Religa a saída.
+    esp_err_t err = esp_lcd_panel_io_tx_param(s_io, LCD_CMD_SLPOUT, NULL, 0);  // SLPOUT (0x11)
+    if (err == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(120));
+        err = esp_lcd_panel_disp_on_off(s_panel, true);                       // DISPON (0x29)
+    }
+    lvgl_port_unlock();
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "tela acordada (sleep out + display on)");
+    }
+    return err;
 }

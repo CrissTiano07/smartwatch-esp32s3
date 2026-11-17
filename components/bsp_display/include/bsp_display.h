@@ -35,3 +35,12 @@ esp_err_t bsp_display_lvgl_init(void);
 // IMPORTANTE: as fontes Montserrat padrão do LVGL NÃO têm acentos — use texto
 // sem acento (ver pendência no HANDOFF sobre fonte própria pt-BR).
 esp_err_t bsp_display_set_text(const char *txt);
+
+// Põe a tela para dormir (economia de energia, Fase 4): desliga a saída do
+// painel (display off, 0x28) e manda o painel entrar em sleep (0x10). A imagem
+// na memória do painel é preservada — bsp_display_wake() a traz de volta.
+esp_err_t bsp_display_sleep(void);
+
+// Acorda a tela: tira o painel do sleep (0x11), espera estabilizar e religa a
+// saída (display on, 0x29). É o inverso exato de bsp_display_sleep().
+esp_err_t bsp_display_wake(void);
