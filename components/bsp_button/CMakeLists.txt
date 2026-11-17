@@ -5,6 +5,5 @@ idf_component_register(
     SRCS "bsp_button.c"
     INCLUDE_DIRS "include"
     REQUIRES
-        driver        # driver/gpio.h — configurar o pino e a interrupção
-        esp_timer     # esp_timer_get_time() — base de tempo do antirrebote
+        driver        # driver/gpio.h — configurar o pino, a interrupção e ler o nível
 )

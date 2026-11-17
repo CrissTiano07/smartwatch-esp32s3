@@ -14,20 +14,21 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "driver/gpio.h"
-#include "esp_timer.h"
 #include "esp_log.h"
 
 static const char *TAG = "bsp_button";
 
 #define BOTAO_GPIO     GPIO_NUM_0        // BOOT (ver docs/HARDWARE.md)
-#define DEBOUNCE_US    (200 * 1000)      // 200 ms: janela que ignora repiques do contato
-#define FILA_TAM       4                 // poucos itens bastam: só precisamos de "houve aperto"
+#define DEBOUNCE_MS    30                // tempo p/ o contato "assentar" antes de ler o nível
+#define FILA_TAM       8                 // guarda as bordas do repique até a task processá-las
 
 static QueueHandle_t   s_fila = NULL;    // ponte ISR -> task
 static bsp_button_cb_t s_cb   = NULL;    // o que fazer a cada clique
 
 // ISR: roda em contexto de interrupção. Regra de ouro: o MÍNIMO possível.
 // Nada de ESP_LOG, malloc ou I2C aqui. Só avisa a task pela fila e sai.
+// Dispara nas DUAS bordas (aperto E soltura) — a task decide o que é o quê
+// lendo o nível real do pino.
 // IRAM_ATTR: o código da ISR fica na RAM interna (rápida e sempre acessível),
 // não na flash — exigência para rotinas de interrupção.
 static void IRAM_ATTR isr_botao(void *arg)
@@ -45,28 +46,41 @@ static void IRAM_ATTR isr_botao(void *arg)
 
 // Task do botão: fica bloqueada na fila até a ISR avisar. Aqui já é contexto
 // normal, então pode logar e chamar o callback do aplicativo.
+//
+// Antirrebote por NÍVEL (máquina de estado), não por tempo-desde-o-último:
+// ao soltar o botão o contato também "treme" e gera bordas espúrias; com o
+// método antigo (janela de 200 ms desde o aperto), soltar depois de ~1 s caía
+// FORA da janela e virava um 2º clique. Aqui, a cada borda esperamos o contato
+// assentar (DEBOUNCE_MS) e lemos o nível real do pino: só contamos clique na
+// transição SOLTO->PRESSIONADO. Soltar nunca gera clique, não importa o tempo.
 static void task_botao(void *arg)
 {
     uint32_t ev;
-    int64_t ultimo_us = 0;               // quando aceitamos o último clique
+    bool pressionado = false;            // estado JÁ confirmado (false = solto)
 
     while (1) {
         // Dorme (sem gastar CPU) até a ISR colocar algo na fila.
         if (xQueueReceive(s_fila, &ev, portMAX_DELAY) != pdTRUE) {
             continue;
         }
-        // Antirrebote por tempo: o contato "treme" e gera várias bordas em
-        // poucos ms. Só aceitamos um clique se já passou a janela desde o
-        // anterior; os repiques dentro da janela são descartados.
-        int64_t agora_us = esp_timer_get_time();
-        if (agora_us - ultimo_us < DEBOUNCE_US) {
-            continue;
-        }
-        ultimo_us = agora_us;
+        // Espera o repique passar antes de decidir pelo nível do pino. As
+        // bordas que chegarem durante esse tempo ficam na fila e serão
+        // processadas em seguida — mas aí o pino já estará estável, então
+        // lerão o mesmo nível e não mudarão o estado (idempotente).
+        vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_MS));
 
-        if (s_cb) {
-            s_cb();
+        // BOOT: nível baixo = pressionado (pull-up em repouso leva a alto).
+        bool nivel_baixo = (gpio_get_level(BOTAO_GPIO) == 0);
+
+        if (nivel_baixo && !pressionado) {
+            pressionado = true;          // transição solto -> pressionado = 1 clique
+            if (s_cb) {
+                s_cb();
+            }
+        } else if (!nivel_baixo && pressionado) {
+            pressionado = false;         // soltou: só atualiza o estado, sem clique
         }
+        // nível igual ao estado conhecido -> repique, ignora
     }
 }
 
@@ -81,14 +95,15 @@ esp_err_t bsp_button_init(bsp_button_cb_t cb)
     }
 
     // GPIO0 como entrada. Pull-up interno: em repouso o pino fica em alto;
-    // apertar o BOOT liga ao GND e leva a baixo. Interrupção na borda de
-    // descida = exatamente o instante do aperto (não trata a soltura).
+    // apertar o BOOT liga ao GND e leva a baixo. Interrupção nas DUAS bordas
+    // (aperto e soltura): a task lê o nível real para decidir o que foi e para
+    // tratar o repique da soltura (ver task_botao).
     gpio_config_t cfg = {
         .pin_bit_mask = (1ULL << BOTAO_GPIO),
         .mode         = GPIO_MODE_INPUT,
         .pull_up_en   = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type    = GPIO_INTR_NEGEDGE,
+        .intr_type    = GPIO_INTR_ANYEDGE,
     };
     esp_err_t err = gpio_config(&cfg);
     if (err != ESP_OK) {
@@ -119,7 +134,7 @@ esp_err_t bsp_button_init(bsp_button_cb_t cb)
         return ESP_ERR_NO_MEM;
     }
 
-    ESP_LOGI(TAG, "botão BOOT (GPIO%d) pronto (interrupção na borda de descida)",
-             BOTAO_GPIO);
+    ESP_LOGI(TAG, "botão BOOT (GPIO%d) pronto (interrupção nas 2 bordas + antirrebote %d ms)",
+             BOTAO_GPIO, DEBOUNCE_MS);
     return ESP_OK;
 }
