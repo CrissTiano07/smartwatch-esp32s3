@@ -69,12 +69,13 @@ void app_main(void)
         }
     }
 
-    // --- Tela (Fase 3, Passo 2): inicializa e pinta de VERMELHO puro ---
-    // Teste da ordem de bytes RGB565: se aparecer outra cor que não vermelho,
-    // a ordem (big-endian) está trocada. Não depende do I2C nem do AXP2101.
-    if (bsp_display_init() == ESP_OK) {
-        esp_err_t ef = bsp_display_fill_rgb565(0xF800);  // 0xF800 = vermelho
-        ESP_LOGI(TAG, "tela: vermelho (%s)", esp_err_to_name(ef));
+    // --- Tela (Fase 3, Passo 3): LVGL com texto fixo ---
+    // O painel sobe primeiro; depois o LVGL assume o desenho e mostra um texto.
+    // Sem acento de propósito: a fonte Montserrat padrão não tem caracteres
+    // pt-BR (ver pendência no HANDOFF). Não depende do I2C nem do AXP2101.
+    if (bsp_display_init() == ESP_OK && bsp_display_lvgl_init() == ESP_OK) {
+        bsp_display_set_text("Smartwatch ok");
+        ESP_LOGI(TAG, "tela: texto fixo");
     } else {
         ESP_LOGE(TAG, "falha ao iniciar a tela");
     }

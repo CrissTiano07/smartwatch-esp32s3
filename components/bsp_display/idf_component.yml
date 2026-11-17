@@ -4,3 +4,7 @@ dependencies:
   # Driver do painel. É a mesma versão que a BSP oficial da Waveshare usa nesta
   # placa (namespace "waveshare"; o CO5300 fala o protocolo do SH8601).
   waveshare/esp_lcd_sh8601: "==2.0.0"
+  # LVGL (gráficos) e o "port" oficial da Espressif que liga o LVGL ao painel
+  # esp_lcd (cria a task do LVGL, o tick e cuida da thread-safety).
+  lvgl/lvgl: "==9.5.0"
+  espressif/esp_lvgl_port: "==2.9.0"

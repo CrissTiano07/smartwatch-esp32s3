@@ -17,3 +17,9 @@ CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
 CONFIG_SPIRAM=y               # liga o suporte a PSRAM
 CONFIG_SPIRAM_MODE_OCT=y      # interface octal (o "R8" é octal; o "R2" seria quad)
 CONFIG_SPIRAM_SPEED_80M=y     # 80 MHz: padrão estável (120 MHz exige ajustes extras)
+
+# --- LVGL (Fase 3) ---
+# Habilita só a(s) fonte(s) que usamos (cada fonte ocupa flash). A Montserrat 28
+# é a do texto/relógio. As fontes padrão do LVGL não têm acentos — textos em
+# pt-BR com acento exigirão fonte própria (lv_font_conv), pendência no HANDOFF.
+CONFIG_LV_FONT_MONTSERRAT_28=y

@@ -11,6 +11,8 @@
 #include "esp_lcd_sh8601.h"        // driver do painel + macros de config QSPI
 #include "esp_check.h"             // ESP_RETURN_ON_ERROR
 #include "esp_log.h"
+#include "esp_lvgl_port.h"         // port oficial: liga o LVGL ao painel esp_lcd
+#include "lvgl.h"                  // API gráfica (label, cores, fontes)
 
 static const char *TAG = "bsp_display";
 
@@ -34,7 +36,9 @@ static const char *TAG = "bsp_display";
 // que é acessível pelo DMA do SPI. 2 bytes por pixel (RGB565).
 static uint8_t s_strip[BSP_DISP_H_RES * STRIP_H * 2];
 
-static esp_lcd_panel_handle_t s_panel = NULL;
+static esp_lcd_panel_handle_t    s_panel = NULL;
+static esp_lcd_panel_io_handle_t s_io = NULL;     // guardado p/ o esp_lvgl_port
+static lv_obj_t                 *s_label = NULL;  // rótulo central do LVGL
 
 // Sequência de init do painel — copiada VERBATIM da BSP oficial da Waveshare
 // (esp32_s3_touch_amoled_2_06.c). Formato: {comando, dados, nº de bytes, atraso_ms}.
@@ -67,10 +71,9 @@ esp_err_t bsp_display_init(void)
     // 2) Camada de I/O do painel sobre o SPI (CS, clock 40 MHz, modo QSPI —
     //    tudo vindo da macro do driver).
     ESP_LOGI(TAG, "criando IO do painel (CS=%d)", PIN_CS);
-    esp_lcd_panel_io_handle_t io = NULL;
     const esp_lcd_panel_io_spi_config_t io_cfg = SH8601_PANEL_IO_QSPI_CONFIG(PIN_CS, NULL, NULL);
     ESP_RETURN_ON_ERROR(
-        esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_HOST, &io_cfg, &io),
+        esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_HOST, &io_cfg, &s_io),
         TAG, "panel_io_spi");
 
     // 3) Cria o painel SH8601 passando a sequência de init do fabricante.
@@ -85,7 +88,7 @@ esp_err_t bsp_display_init(void)
         .bits_per_pixel = LCD_BITS_PER_PIXEL,
         .vendor_config = &vendor,
     };
-    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_sh8601(io, &panel_cfg, &s_panel),
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_sh8601(s_io, &panel_cfg, &s_panel),
                         TAG, "new_panel_sh8601");
 
     // 4) Liga o painel. O offset de coluna (22) alinha a janela de desenho com
@@ -121,5 +124,105 @@ esp_err_t bsp_display_fill_rgb565(uint16_t color)
             esp_lcd_panel_draw_bitmap(s_panel, 0, y, BSP_DISP_H_RES, y + h, s_strip),
             TAG, "draw_bitmap");
     }
+    return ESP_OK;
+}
+
+// Quantas linhas de tela cabem em cada buffer de desenho do LVGL. Buffer
+// PARCIAL (não o frame inteiro): o LVGL desenha por partes. 40 linhas ->
+// 410*40*2 = ~32 KB por buffer; com buffer duplo, ~64 KB de RAM interna.
+#define LVGL_BUF_LINES 40
+
+// Arredondamento da área a redesenhar.
+// PORQUÊ: o SH8601/CO5300 só aceita janelas de pixels alinhadas em 2 — a
+// coluna/linha inicial tem de ser PAR e a largura/altura, PAR. Quando o LVGL
+// manda uma área de largura ÍMPAR, o painel interpreta o fluxo de pixels com
+// uma linha a mais/menos e cada linha "escorrega" um pixel para o lado — o
+// texto aparece inclinado (efeito itálico) e deslocado. Este callback, ligado
+// ao evento LV_EVENT_INVALIDATE_AREA, expande a área: início para baixo (par)
+// e fim para cima (ímpar), garantindo largura/altura pares. Mesma lógica da
+// BSP oficial da Waveshare para o LVGL 9.
+static void rounder_event_cb(lv_event_t *e)
+{
+    lv_area_t *area = (lv_area_t *)lv_event_get_param(e);
+    area->x1 = (area->x1 >> 1) << 1;         // x1 -> par (arredonda p/ baixo)
+    area->y1 = (area->y1 >> 1) << 1;         // y1 -> par
+    area->x2 = ((area->x2 >> 1) << 1) + 1;   // x2 -> ímpar (arredonda p/ cima)
+    area->y2 = ((area->y2 >> 1) << 1) + 1;   // y2 -> ímpar
+}
+
+esp_err_t bsp_display_lvgl_init(void)
+{
+    if (s_panel == NULL) {
+        return ESP_ERR_INVALID_STATE;  // bsp_display_init() não rodou
+    }
+
+    // 1) Sobe o serviço do LVGL (uma task dedicada + timer do tick). A regra do
+    //    projeto pede stack >= 8192 (crash antigo foi stack curto no LVGL).
+    lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    port_cfg.task_stack = 8192;
+    port_cfg.task_priority = 4;
+    ESP_RETURN_ON_ERROR(lvgl_port_init(&port_cfg), TAG, "lvgl_port_init");
+
+    // 2) Registra o painel como um display do LVGL. Buffers na RAM INTERNA com
+    //    DMA (buff_dma=true, buff_spiram=false), como a BSP oficial faz.
+    //    swap_bytes=true: o LVGL desenha RGB565 em little-endian, mas o painel
+    //    espera big-endian (foi o que o teste do vermelho confirmou no Passo 2).
+    const lvgl_port_display_cfg_t disp_cfg = {
+        .io_handle = s_io,
+        .panel_handle = s_panel,
+        .buffer_size = BSP_DISP_H_RES * LVGL_BUF_LINES,
+        .double_buffer = true,
+        .hres = BSP_DISP_H_RES,
+        .vres = BSP_DISP_V_RES,
+        .color_format = LV_COLOR_FORMAT_RGB565,
+        .flags = {
+            .buff_dma = true,
+            .buff_spiram = false,
+            .swap_bytes = true,
+            // sw_rotate=true faz o port NÃO chamar esp_lcd_panel_swap_xy (que o
+            // SH8601 não suporta -> erro "swap_xy is not supported"). Sem
+            // rotação (0°), não há custo; é só para evitar essa chamada.
+            .sw_rotate = true,
+        },
+    };
+    lv_display_t *disp = lvgl_port_add_disp(&disp_cfg);
+    if (disp == NULL) {
+        ESP_LOGE(TAG, "lvgl_port_add_disp falhou");
+        return ESP_FAIL;
+    }
+
+    // 3) Cria o rótulo central. Toda mexida em objetos do LVGL tem de estar
+    //    entre lock/unlock, porque a task do LVGL roda em paralelo.
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
+    }
+    // Alinhamento de 2 px exigido pelo painel (ver rounder_event_cb acima).
+    lv_display_add_event_cb(disp, rounder_event_cb, LV_EVENT_INVALIDATE_AREA, NULL);
+
+    lv_obj_t *scr = lv_display_get_screen_active(disp);
+    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);  // fundo preto (AMOLED)
+
+    s_label = lv_label_create(scr);
+    lv_obj_set_style_text_color(s_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_label, &lv_font_montserrat_28, 0);
+    lv_label_set_text(s_label, "");
+    lv_obj_center(s_label);
+    lvgl_port_unlock();
+
+    ESP_LOGI(TAG, "LVGL pronto");
+    return ESP_OK;
+}
+
+esp_err_t bsp_display_set_text(const char *txt)
+{
+    if (s_label == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
+    }
+    lv_label_set_text(s_label, txt);   // o LVGL copia a string internamente
+    lv_obj_center(s_label);            // recentraliza (o tamanho pode mudar)
+    lvgl_port_unlock();
     return ESP_OK;
 }

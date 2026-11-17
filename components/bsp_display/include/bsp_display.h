@@ -24,3 +24,14 @@ esp_err_t bsp_display_init(void);
 // A cor vai para o painel em big-endian (byte alto primeiro), que é a ordem
 // que este painel espera. Desenha em faixas, sem alocar memória.
 esp_err_t bsp_display_fill_rgb565(uint16_t color);
+
+// Sobe o LVGL sobre o painel (task do LVGL, tick e thread-safety via
+// esp_lvgl_port) e cria um rótulo (label) central. Chamar depois de
+// bsp_display_init(). A partir daqui o desenho é feito pelo LVGL, não mais
+// por bsp_display_fill_rgb565().
+esp_err_t bsp_display_lvgl_init(void);
+
+// Troca o texto do rótulo central, de forma segura entre tarefas.
+// IMPORTANTE: as fontes Montserrat padrão do LVGL NÃO têm acentos — use texto
+// sem acento (ver pendência no HANDOFF sobre fonte própria pt-BR).
+esp_err_t bsp_display_set_text(const char *txt);
