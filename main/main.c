@@ -18,6 +18,7 @@
 #include "bsp_i2c.h"             // nosso barramento I2C compartilhado
 #include "axp2101.h"             // nosso driver do chip de energia
 #include "pcf85063.h"            // nosso driver do RTC (hora)
+#include "bsp_display.h"         // nossa tela AMOLED (CO5300/QSPI)
 
 // Etiqueta que aparece no começo de cada linha de log: "I (123) main: ..."
 // Ajuda a saber de qual módulo veio a mensagem quando o projeto crescer.
@@ -66,6 +67,16 @@ void app_main(void)
             bool semeou = false;
             pcf85063_semear_se_preciso(&semeou);
         }
+    }
+
+    // --- Tela (Fase 3, Passo 2): inicializa e pinta de VERMELHO puro ---
+    // Teste da ordem de bytes RGB565: se aparecer outra cor que não vermelho,
+    // a ordem (big-endian) está trocada. Não depende do I2C nem do AXP2101.
+    if (bsp_display_init() == ESP_OK) {
+        esp_err_t ef = bsp_display_fill_rgb565(0xF800);  // 0xF800 = vermelho
+        ESP_LOGI(TAG, "tela: vermelho (%s)", esp_err_to_name(ef));
+    } else {
+        ESP_LOGE(TAG, "falha ao iniciar a tela");
     }
 
     // --- Batimento: prova que o programa continua vivo ---

@@ -34,7 +34,28 @@ Investigar na fase do touch — ver pino de reset no esquemático/demo oficial.
 | 17 | SD_CS |
 | 0 | BOOT |
 
-Pinos QSPI da tela: **pendente** — copiar do esquemático/demo oficial na Fase 3.
+## Tela AMOLED CO5300 — QSPI (confirmado na Fase 3)
+Fonte: BSP oficial da Waveshare, repo `waveshareteam/Waveshare-ESP32-components`,
+commit `9daffb7`, arquivos `bsp/esp32_s3_touch_amoled_2_06/include/bsp/`
+(`esp32_s3_touch_amoled_2_06.h`, `display.h`) e o `.c` da BSP.
+
+| Sinal | GPIO | Observação |
+|-------|------|------------|
+| CS | 12 | chip select |
+| SCLK (PCLK) | 11 | clock QSPI |
+| D0 (SIO0) | 4 | linha de dados 0 |
+| D1 | 5 | linha de dados 1 |
+| D2 | 6 | linha de dados 2 |
+| D3 | 7 | linha de dados 3 |
+| RST | 8 | reset do painel |
+| Backlight | — | não há; brilho via comando do painel `0x51` |
+
+- Host SPI: **SPI2_HOST** · clock **40 MHz** · modo QSPI (4 linhas de dados).
+- Painel: **410 × 502**, RGB565 **big-endian**.
+- **Offset de coluna:** `esp_lcd_panel_set_gap(panel, 22, 0)` (x=22 / 0x16, y=0). Sem isso a imagem sai deslocada.
+- Driver usado pela Waveshare nesta placa: `esp_lcd_sh8601` (o CO5300 compartilha o conjunto de comandos QSPI do SH8601).
+- **A tela NÃO depende do AXP2101 por software** — a BSP não liga nenhum regulador (LDO) antes de inicializar o painel.
+- TE (GPIO13) existe no hardware, mas a BSP oficial **não** o utiliza (sem sincronismo por TE).
 
 ## Bibliotecas de referência
 - XPowersLib (AXP2101) — lewisxhe

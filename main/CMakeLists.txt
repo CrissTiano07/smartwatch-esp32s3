@@ -14,4 +14,5 @@ idf_component_register(
         bsp_i2c                 # nosso barramento I2C
         axp2101                 # nosso driver de energia
         pcf85063                # nosso driver do RTC
+        bsp_display             # nossa tela AMOLED (CO5300/QSPI)
 )
