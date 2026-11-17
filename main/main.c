@@ -14,6 +14,7 @@
 #include "esp_flash.h"           // esp_flash_get_size: tamanho da memória flash
 #include "esp_system.h"          // esp_get_free_heap_size, esp_get_idf_version
 #include "esp_timer.h"           // esp_timer_get_time: microssegundos desde o boot
+#include "esp_psram.h"           // esp_psram_get_size: tamanho da PSRAM detectada
 #include "bsp_i2c.h"             // nosso barramento I2C compartilhado
 #include "axp2101.h"             // nosso driver do chip de energia
 #include "pcf85063.h"            // nosso driver do RTC (hora)
@@ -41,6 +42,13 @@ void app_main(void)
 
     ESP_LOGI(TAG, "ESP-IDF: %s", esp_get_idf_version());
     ESP_LOGI(TAG, "heap livre: %" PRIu32 " bytes", esp_get_free_heap_size());
+
+    // PSRAM: confirma que os 8 MB do ESP32-S3R8 foram detectados (precisamos
+    // dela para os buffers da tela na Fase 3). esp_psram_get_size() devolve 0
+    // se a PSRAM não foi habilitada/encontrada no sdkconfig.
+    ESP_LOGI(TAG, "PSRAM: %u bytes (%u MB)",
+             (unsigned)esp_psram_get_size(),
+             (unsigned)(esp_psram_get_size() / (1024 * 1024)));
 
     // --- I2C: barramento primeiro, depois quem está nele ---
     // Se algo falhar, NÃO reiniciamos: seguimos no laço para o erro

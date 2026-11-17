@@ -10,3 +10,10 @@ CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
 # Flash de 32 MB (docs/HARDWARE.md).
 CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
+
+# --- PSRAM (necessária para LVGL / buffers da tela da Fase 3) ---
+# O SoC é o ESP32-S3R8: 8 MB de PSRAM com interface OCTAL (8 linhas de dados).
+# Sem o modo certo, a PSRAM não é detectada (ou trava no boot).
+CONFIG_SPIRAM=y               # liga o suporte a PSRAM
+CONFIG_SPIRAM_MODE_OCT=y      # interface octal (o "R8" é octal; o "R2" seria quad)
+CONFIG_SPIRAM_SPEED_80M=y     # 80 MHz: padrão estável (120 MHz exige ajustes extras)
