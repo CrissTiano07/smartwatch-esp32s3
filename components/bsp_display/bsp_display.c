@@ -240,20 +240,25 @@ esp_err_t bsp_display_sleep(void)
     if (s_panel == NULL || s_io == NULL) {
         return ESP_ERR_INVALID_STATE;  // a tela não subiu
     }
-    // Trava o LVGL durante a troca de estado para não disputar o barramento
-    // com um flush da task do LVGL. (A PAUSA completa do LVGL vem no Passo 3;
-    // aqui só serializamos o acesso ao painel.)
+    // 1) PAUSA o LVGL: desliga o tick e os timers, então a task do LVGL deixa
+    //    de desenhar enquanto a tela dorme (economiza CPU e nada é enviado a um
+    //    painel adormecido).
+    lvgl_port_stop();
+    // 2) Trava o mutex do LVGL para garantir que um flush em andamento terminou
+    //    antes de mandarmos o painel dormir. Se não conseguir a trava, desfaz a
+    //    pausa para não deixar o LVGL parado por engano.
     if (!lvgl_port_lock(0)) {
+        lvgl_port_resume();
         return ESP_ERR_TIMEOUT;
     }
-    // 1) Desliga a saída (pixels apagam). 2) Manda o painel dormir.
+    // 3) Desliga a saída (pixels apagam) e manda o painel dormir.
     esp_err_t err = esp_lcd_panel_disp_on_off(s_panel, false);          // DISPOFF (0x28)
     if (err == ESP_OK) {
         err = esp_lcd_panel_io_tx_param(s_io, LCD_CMD_SLPIN, NULL, 0);  // SLPIN (0x10)
     }
     lvgl_port_unlock();
     if (err == ESP_OK) {
-        ESP_LOGI(TAG, "tela dormindo (display off + sleep)");
+        ESP_LOGI(TAG, "tela dormindo (LVGL pausado + display off + sleep)");
     }
     return err;
 }
@@ -275,8 +280,29 @@ esp_err_t bsp_display_wake(void)
         err = esp_lcd_panel_disp_on_off(s_panel, true);                       // DISPON (0x29)
     }
     lvgl_port_unlock();
+    // 3) RETOMA o LVGL (tick + timers) para voltar a desenhar. O repinte da
+    //    tela é pedido por quem chamou (bsp_display_redraw).
+    lvgl_port_resume();
     if (err == ESP_OK) {
-        ESP_LOGI(TAG, "tela acordada (sleep out + display on)");
+        ESP_LOGI(TAG, "tela acordada (sleep out + display on + LVGL retomado)");
     }
     return err;
+}
+
+esp_err_t bsp_display_redraw(void)
+{
+    if (s_label == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
+    }
+    // Marca a tela INTEIRA como "suja" para o LVGL repintar tudo (fundo +
+    // rótulo). Necessário depois do wake: enquanto o painel dormia, ele
+    // ignorou o que o LVGL desenhou, então a memória do painel pode estar
+    // desatualizada. lv_obj_get_screen(s_label) devolve a tela que contém o
+    // rótulo — sem depender de qual é o display "padrão".
+    lv_obj_invalidate(lv_obj_get_screen(s_label));
+    lvgl_port_unlock();
+    return ESP_OK;
 }

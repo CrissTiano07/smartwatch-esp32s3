@@ -95,6 +95,8 @@ commit `9daffb7`, arquivos `bsp/esp32_s3_touch_amoled_2_06/include/bsp/`
 Leitura real (2026-11-16, USB + bateria, cheia): `00=28 01=14 34=10 35=0E A4=64`
 → 4110 mV (±2 mV entre leituras) · 100% · VBUS sim · bateria sim · parado/cheio.
 
+**Carga confirmada (2026-11-17):** no boot apareceu `carregando` a ~4213 mV e, logo depois, `parado/cheio`. Ou seja, a carga **sobe até ~4,2 V** e a bateria **assenta em ~4,1 V** em repouso — comportamento normal de LiPo. **Não há limite em 4,1 V**; o 4110 mV lido com a bateria cheia é a tensão de repouso, não um teto de carga. A transição `carregando → parado/cheio` (STATUS2, bits 6:5) funciona.
+
 ## PCF85063 — registradores de hora (fonte: datasheet NXP PCF85063A)
 Endereço I2C **0x51** · INT no **GPIO39** (não usado ainda; reservado para alarme/wake nas fases de energia).
 Todos os registradores de hora estão em **BCD** (cada dígito decimal num nibble; ex.: 59 = `0x59`).

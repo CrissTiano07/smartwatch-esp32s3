@@ -10,8 +10,8 @@ Relógio de pulso que **mostra a hora certa sem depender de Wi-Fi** e dura o má
 | R2 | Hora sobrevive a reset e sono profundo | Após reset/deep sleep, hora volta correta sem rede |
 | R3 | Acerto da hora | NTP quando houver Wi-Fi conhecido **ou** acerto manual pelo toque |
 | R4 | Fuso Fortaleza | Exibe UTC-3, sem horário de verão |
-| R5 | Tela apaga sozinha | Sem interação por N s → tela apaga (N configurável) |
-| R6 | Acordar | Botão ou toque acende a tela em < 300 ms |
+| R5 | Tela apaga sozinha (**só por timeout**) | Sem interação por N s → tela apaga (N configurável). O botão **não** apaga a tela (ver DECISIONS #11) |
+| R6 | Acordar / botão | **Tela apagada:** botão (ou toque, futuro) acende em < 300 ms e reinicia o timeout. **Tela acesa:** o clique só reinicia o timeout — reservado p/ navegação/menu futuros (DECISIONS #11) |
 | R7 | Bateria visível | % estimada (E-Gauge do AXP2101, fallback por tensão) |
 | R8 | Estabilidade | 72 h ligado sem travar/reiniciar |
 

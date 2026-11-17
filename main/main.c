@@ -11,6 +11,7 @@
 #include <time.h>                // struct tm, timegm, localtime_r, strftime
 #include "freertos/FreeRTOS.h"   // sistema operacional de tempo real do ESP32 (sempre antes de task.h)
 #include "freertos/task.h"       // vTaskDelay: pausar sem travar o processador
+#include "freertos/semphr.h"     // mutex que serializa as transições de energia da tela
 #include "esp_log.h"             // ESP_LOGI/ESP_LOGW/ESP_LOGE: log com nível e etiqueta
 #include "esp_chip_info.h"       // esp_chip_info: modelo e núcleos do chip
 #include "esp_flash.h"           // esp_flash_get_size: tamanho da memória flash
@@ -28,25 +29,31 @@
 // Ajuda a saber de qual módulo veio a mensagem quando o projeto crescer.
 static const char *TAG = "main";
 
-// Estado da tela para o teste do Passo 2 (alternar com o botão).
-static bool s_tela_dormindo = false;
+// --- Estado de energia da tela (Fase 4, Passo 3) ---
+// Tempo sem atividade até a tela apagar. Curto de propósito nesta fase, para
+// facilitar o teste; o valor "de produto" é ajustado depois.
+#define TELA_TIMEOUT_MS 15000
 
-// Callback do botão BOOT. Roda na task do bsp_button (não na ISR), então aqui
-// é seguro logar e mexer na tela (inclusive com os 120 ms de espera do wake).
-// Passo 2: cada clique ALTERNA a tela entre dormindo e acordada, só para
-// validar sleep/wake na placa. No Passo 3 isto muda: o timeout apaga e o
-// botão apenas acende.
-static void ao_clicar_botao(void)
+// Flags preenchidas no boot (se cada subsistema subiu). Ficam em escopo de
+// arquivo porque o laço principal E o callback do botão as usam.
+static bool s_tela_ok = false;
+static bool s_rtc_ok  = false;
+static int  s_ultimo_min = -1;             // último minuto mostrado (-1 = nenhum)
+
+// A tela está dormindo? E quando foi a última atividade (microssegundos desde
+// o boot)? 'volatile' porque são lidas/escritas por tarefas diferentes (o laço
+// principal e a task do botão).
+static volatile bool    s_tela_dormindo = false;
+static volatile int64_t s_ultima_atividade_us = 0;
+
+// Serializa as transições de energia da tela (apagar/acender), que podem ser
+// pedidas por tarefas diferentes ao mesmo tempo (laço = timeout, botão = acordar).
+static SemaphoreHandle_t s_power_mux = NULL;
+
+// Marca "houve atividade agora" — reinicia a contagem do timeout.
+static void registrar_atividade(void)
 {
-    if (s_tela_dormindo) {
-        bsp_display_wake();
-        s_tela_dormindo = false;
-    } else {
-        bsp_display_sleep();
-        s_tela_dormindo = true;
-    }
-    ESP_LOGI(TAG, "botão: clique -> tela %s",
-             s_tela_dormindo ? "dormindo" : "acordada");
+    s_ultima_atividade_us = esp_timer_get_time();
 }
 
 // Converte uma data do calendário (UTC) em "epoch" = segundos desde
@@ -83,6 +90,74 @@ static int hhmm_fortaleza(const pcf85063_hora_t *h, char *buf, size_t n)
     return local.tm_min;
 }
 
+// Atualiza o relógio HH:MM na tela a partir do RTC. 'forcar' ignora a checagem
+// de "o minuto mudou" — usamos no wake, para repintar a hora imediatamente, já
+// que o painel ignorou o que o LVGL desenhou enquanto dormia.
+static void mostrar_hora(bool forcar)
+{
+    if (!s_rtc_ok || !s_tela_ok) {
+        return;
+    }
+    pcf85063_hora_t h;
+    if (pcf85063_ler(&h) != ESP_OK) {
+        return;
+    }
+    char hhmm[6];  // "HH:MM" + terminador
+    int min_local = hhmm_fortaleza(&h, hhmm, sizeof(hhmm));
+    if (forcar || min_local != s_ultimo_min) {
+        bsp_display_set_text(hhmm);
+        s_ultimo_min = min_local;
+    }
+}
+
+// Apaga a tela por inatividade. Idempotente e protegida por mutex (pode ser
+// chamada de tarefas diferentes). bsp_display_sleep() já pausa o LVGL.
+static void tela_dormir(void)
+{
+    if (s_power_mux == NULL) {
+        return;
+    }
+    xSemaphoreTake(s_power_mux, portMAX_DELAY);
+    if (!s_tela_dormindo && s_tela_ok) {
+        bsp_display_sleep();
+        s_tela_dormindo = true;
+        ESP_LOGI(TAG, "tela: apagada por timeout");
+    }
+    xSemaphoreGive(s_power_mux);
+}
+
+// Acende a tela. Depois de acordar o painel e retomar o LVGL (dentro de
+// bsp_display_wake), atualiza a hora e força repintar a tela inteira — o painel
+// ignorou o desenho feito enquanto dormia.
+static void tela_acordar(const char *motivo)
+{
+    if (s_power_mux == NULL) {
+        return;
+    }
+    xSemaphoreTake(s_power_mux, portMAX_DELAY);
+    if (s_tela_dormindo && s_tela_ok) {
+        bsp_display_wake();
+        s_tela_dormindo = false;
+        mostrar_hora(true);        // repinta a hora atual já
+        bsp_display_redraw();      // invalida a tela inteira (fundo + rótulo)
+        ESP_LOGI(TAG, "tela: acesa (%s)", motivo);
+    }
+    xSemaphoreGive(s_power_mux);
+}
+
+// Callback do botão BOOT. Roda na task do bsp_button (não na ISR), então é
+// seguro logar e mexer na tela (inclusive os 120 ms de espera do wake). Cada
+// clique conta como atividade (reinicia o timeout) e, se a tela estiver
+// dormindo, acende. Com a tela acesa, basta reiniciar o timeout.
+static void ao_clicar_botao(void)
+{
+    registrar_atividade();
+    if (s_tela_dormindo) {
+        tela_acordar("botão");
+    }
+    ESP_LOGI(TAG, "botão: clique");
+}
+
 // app_main é o "main()" do ESP-IDF: o sistema chama esta função depois do boot.
 void app_main(void)
 {
@@ -114,15 +189,14 @@ void app_main(void)
     // Se algo falhar, NÃO reiniciamos: seguimos no laço para o erro
     // ficar visível no monitor (um reboot em loop esconderia a causa).
     bool axp_ok = false;
-    bool rtc_ok = false;
     if (bsp_i2c_init() == ESP_OK) {
         bsp_i2c_scan();
         axp_ok = (axp2101_init() == ESP_OK);
 
         // RTC: registra o chip e, se a hora estiver inválida (ou se a opção
         // RTC_FORCAR_SEMENTE estiver ligada), semeia com a hora de build.
-        rtc_ok = (pcf85063_init() == ESP_OK);
-        if (rtc_ok) {
+        s_rtc_ok = (pcf85063_init() == ESP_OK);
+        if (s_rtc_ok) {
             bool semeou = false;
             pcf85063_semear_se_preciso(&semeou);
         }
@@ -131,8 +205,8 @@ void app_main(void)
     // --- Tela (Fase 3, Passo 4): relógio HH:MM do RTC ---
     // O painel sobe primeiro; depois o LVGL assume o desenho. O relógio em si
     // é atualizado no laço abaixo, quando o minuto vira. Não depende do AXP2101.
-    bool tela_ok = (bsp_display_init() == ESP_OK && bsp_display_lvgl_init() == ESP_OK);
-    if (tela_ok) {
+    s_tela_ok = (bsp_display_init() == ESP_OK && bsp_display_lvgl_init() == ESP_OK);
+    if (s_tela_ok) {
         // Heap livre logo após subir o LVGL, separado por tipo de memória, para
         // medirmos quanto o LVGL consumiu (buffers de desenho vão na RAM interna).
         ESP_LOGI(TAG, "heap após LVGL: interno %u B | PSRAM %u B",
@@ -143,9 +217,15 @@ void app_main(void)
         ESP_LOGE(TAG, "falha ao iniciar a tela");
     }
 
-    // --- Botão BOOT (Fase 4): por enquanto só loga o clique ---
-    // Leitura por interrupção (sem polling). A cada aperto, 'ao_clicar_botao'
-    // é chamado pela task do botão e imprime "botão: clique" no monitor.
+    // --- Botão BOOT + gerenciador de energia da tela (Fase 4) ---
+    // Mutex das transições de energia e marca inicial de atividade (o boot
+    // conta como atividade, para a tela não apagar logo de cara). Depois sobe o
+    // botão: cada clique acorda a tela e reinicia o timeout (ao_clicar_botao).
+    s_power_mux = xSemaphoreCreateMutex();
+    if (s_power_mux == NULL) {
+        ESP_LOGE(TAG, "sem memória para o mutex de energia (timeout desabilitado)");
+    }
+    registrar_atividade();
     if (bsp_button_init(ao_clicar_botao) != ESP_OK) {
         ESP_LOGW(TAG, "falha ao iniciar o botão");
     }
@@ -154,7 +234,6 @@ void app_main(void)
     // a hora interna (RTC) continua em UTC. Formato POSIX: "<-03>3".
     setenv("TZ", "<-03>3", 1);
     tzset();
-    int ultimo_min = -1;  // -1 = ainda não mostramos nenhum minuto
 
     // --- Batimento: prova que o programa continua vivo ---
     while (1) {
@@ -181,7 +260,7 @@ void app_main(void)
             }
         }
 
-        if (rtc_ok) {
+        if (s_rtc_ok) {
             pcf85063_hora_t h;   // na stack: sem malloc no laço
             bool valida = false;
             esp_err_t e1 = pcf85063_ler(&h);
@@ -192,18 +271,29 @@ void app_main(void)
                          h.ano, h.mes, h.dia, h.hora, h.min, h.seg,
                          valida ? "válida" : "INVÁLIDA");
 
-                // Relógio na tela: converte para Fortaleza e, se o minuto
-                // mudou, atualiza o label (evita redesenhar à toa a cada 5 s).
-                if (tela_ok) {
+                // Relógio na tela: só atualiza com a tela ACESA (dormindo, o
+                // LVGL está pausado e o painel ignoraria o desenho). Ao acordar,
+                // tela_acordar() repinta a hora na hora. Se o minuto mudou,
+                // atualiza o label (evita redesenhar à toa a cada 5 s).
+                if (s_tela_ok && !s_tela_dormindo) {
                     char hhmm[6];  // "HH:MM" + terminador
                     int min_local = hhmm_fortaleza(&h, hhmm, sizeof(hhmm));
-                    if (min_local != ultimo_min) {
+                    if (min_local != s_ultimo_min) {
                         bsp_display_set_text(hhmm);
-                        ultimo_min = min_local;
+                        s_ultimo_min = min_local;
                     }
                 }
             } else {
                 ESP_LOGW(TAG, "leitura do RTC falhou");
+            }
+        }
+
+        // Energia da tela: apaga se passou do timeout sem atividade. O botão
+        // (noutra task) acorda na hora; aqui a granularidade é a do laço (5 s).
+        if (s_tela_ok && !s_tela_dormindo) {
+            int64_t inativo_us = esp_timer_get_time() - s_ultima_atividade_us;
+            if (inativo_us >= (int64_t)TELA_TIMEOUT_MS * 1000) {
+                tela_dormir();
             }
         }
 
