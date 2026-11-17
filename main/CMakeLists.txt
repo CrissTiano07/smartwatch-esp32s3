@@ -15,4 +15,5 @@ idf_component_register(
         axp2101                 # nosso driver de energia
         pcf85063                # nosso driver do RTC
         bsp_display             # nossa tela AMOLED (CO5300/QSPI)
+        bsp_button              # nosso botão físico BOOT (GPIO0)
 )

@@ -26,13 +26,28 @@ Fonte oficial: https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.06
 FT3168 ausente no scan: provável sono/reset do controlador de touch (**não verificado**).
 Investigar na fase do touch — ver pino de reset no esquemático/demo oficial.
 
+## Botões físicos (Fase 4)
+A placa tem **dois botões laterais: BOOT e PWR** (wiki oficial, FAQ "Can both buttons be programmed?").
+
+| Botão | Como chega ao ESP32 | Pressionado = | Confiança |
+|-------|---------------------|---------------|-----------|
+| **BOOT** | **GPIO0 direto** | nível **baixo** (0) | ✅ confirmado |
+| **PWR** | wiki diz "via **EXIO6** de um IO estendido"; **não confirmado** | nível **alto** (1) | 🟨 em aberto |
+
+- **BOOT (GPIO0):** a wiki diz "the GPIO0 can detect the high and low level of the button... low level is pressed". É o que usamos na Fase 4 (componente `bsp_button`, interrupção na borda de descida). GPIO0 é pino de *strapping* (BOOT): ao **ligar** segurando-o, entra em modo download; em **runtime** é entrada normal.
+- **PWR — como chega ao ESP32 (em aberto):**
+  - A wiki fala em "**EXIO6** detection buttons of the extended IO" — ou seja, um **expansor de I/O** por I2C. **Mas o nosso scan I2C (0x18, 0x34, 0x40, 0x51, 0x6B) não achou expansor nenhum** (endereços típicos 0x20–0x27 vazios). Então ou a frase foi copiada de outra placa, ou o PWR passa por outro caminho.
+  - **Não há linha de IRQ do PWR mapeada a um GPIO conhecido.** A BSP oficial não ajuda: tem `BSP_CAPS_BUTTONS 0`, nenhuma macro de botão, e o comentário "ESP-SparkBot-BSP pinout" (header copiado de outra placa).
+  - **Via AXP2101?** Não confirmado. O comportamento "**segurar ~6 s desliga a placa**" e "**clique liga quando desligada**" é **hardware do PMU** (típico do pino PWRON do AXP2101) e **independe do nosso firmware**. Se o PWR for lido por software, seria pelos registradores de IRQ de power-key do AXP2101 — **não verificado** (não mexemos nesses regs ainda).
+  - **Para fechar:** ler o esquemático oficial (`ESP32-S3-Touch-AMOLED-2.06.pdf` no site da Waveshare) ou o código de demo oficial. Enquanto isso, a Fase 4 usa só o BOOT.
+
 ## Outros pinos
 | GPIO | Uso |
 |------|-----|
 | 13 | LCD_TE (sincronismo de tela) |
 | 16 | I2S_MCLK (ES8311/ES7210) |
 | 17 | SD_CS |
-| 0 | BOOT |
+| 0 | BOOT (botão; runtime = entrada por interrupção — Fase 4) |
 
 ## Tela AMOLED CO5300 — QSPI (confirmado na Fase 3)
 Fonte: BSP oficial da Waveshare, repo `waveshareteam/Waveshare-ESP32-components`,

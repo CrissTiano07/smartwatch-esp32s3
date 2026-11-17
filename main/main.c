@@ -22,10 +22,19 @@
 #include "axp2101.h"             // nosso driver do chip de energia
 #include "pcf85063.h"            // nosso driver do RTC (hora)
 #include "bsp_display.h"         // nossa tela AMOLED (CO5300/QSPI)
+#include "bsp_button.h"          // nosso botão físico BOOT (GPIO0)
 
 // Etiqueta que aparece no começo de cada linha de log: "I (123) main: ..."
 // Ajuda a saber de qual módulo veio a mensagem quando o projeto crescer.
 static const char *TAG = "main";
+
+// Callback do botão BOOT. Roda na task do bsp_button (não na ISR), então
+// aqui é seguro logar. Por enquanto só prova que a interrupção chegou; nas
+// próximas etapas da Fase 4 este clique vai acordar a tela.
+static void ao_clicar_botao(void)
+{
+    ESP_LOGI(TAG, "botão: clique");
+}
 
 // Converte uma data do calendário (UTC) em "epoch" = segundos desde
 // 1970-01-01. É o inverso do gmtime. A newlib do ESP-IDF não traz timegm(),
@@ -119,6 +128,13 @@ void app_main(void)
         bsp_display_set_text("--:--");  // placeholder até a 1ª leitura do RTC
     } else {
         ESP_LOGE(TAG, "falha ao iniciar a tela");
+    }
+
+    // --- Botão BOOT (Fase 4): por enquanto só loga o clique ---
+    // Leitura por interrupção (sem polling). A cada aperto, 'ao_clicar_botao'
+    // é chamado pela task do botão e imprime "botão: clique" no monitor.
+    if (bsp_button_init(ao_clicar_botao) != ESP_OK) {
+        ESP_LOGW(TAG, "falha ao iniciar o botão");
     }
 
     // Fuso de Fortaleza (UTC-3, sem horário de verão). Só afeta a EXIBIÇÃO;
