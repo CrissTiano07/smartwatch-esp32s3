@@ -38,6 +38,7 @@ Quando o RTC guarda uma hora errada mas marcada como válida (OS=0, ex.: resquí
 `idf.py.exe build` pela ferramenta **PowerShell** (no Git Bash, `cmd /c` sofre path-mangling do MSYS e abre cmd interativo). Flash/monitor seguem com o Cristiano.
 
 ## Bloqueios / dúvidas abertas
+- **Fonte com acentos (pt-BR):** as fontes Montserrat padrão do LVGL não têm caracteres acentuados. Textos atuais são sem acento ("Smartwatch ok"). Para textos pt-BR com acento, gerar uma fonte própria com os glifos necessários (ferramenta `lv_font_conv`) e habilitá-la. Pendência das fases de UI.
 - Capacidade real da bateria (400 mAh?)
 - Pinos QSPI da tela (pegar do demo oficial na Fase 3)
 - Extensão ESP-IDF do VS Code não reconhece a instalação (exige EIM). Instalador EIM falhou ao criar venv ("non-UTF8 output"). Não bloqueia: usar terminal.
