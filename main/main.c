@@ -29,10 +29,9 @@
 // Ajuda a saber de qual módulo veio a mensagem quando o projeto crescer.
 static const char *TAG = "main";
 
-// --- Estado de energia da tela (Fase 4, Passo 3) ---
-// Tempo sem atividade até a tela apagar. Curto de propósito nesta fase, para
-// facilitar o teste; o valor "de produto" é ajustado depois.
-#define TELA_TIMEOUT_MS 15000
+// --- Estado de energia da tela (Fase 4) ---
+// O tempo sem interação até apagar vem do menuconfig
+// (CONFIG_SW_TELA_TIMEOUT_MS, padrão 5000 ms — ver main/Kconfig.projbuild).
 
 // Flags preenchidas no boot (se cada subsistema subiu). Ficam em escopo de
 // arquivo porque o laço principal E o callback do botão as usam.
@@ -42,18 +41,29 @@ static int  s_ultimo_min = -1;             // último minuto mostrado (-1 = nenh
 
 // A tela está dormindo? E quando foi a última atividade (microssegundos desde
 // o boot)? 'volatile' porque são lidas/escritas por tarefas diferentes (o laço
-// principal e a task do botão).
+// principal, a task do botão e a task do esp_timer).
 static volatile bool    s_tela_dormindo = false;
 static volatile int64_t s_ultima_atividade_us = 0;
 
 // Serializa as transições de energia da tela (apagar/acender), que podem ser
-// pedidas por tarefas diferentes ao mesmo tempo (laço = timeout, botão = acordar).
+// pedidas por tarefas diferentes ao mesmo tempo (timer = apagar, botão = acordar).
 static SemaphoreHandle_t s_power_mux = NULL;
 
-// Marca "houve atividade agora" — reinicia a contagem do timeout.
+// Temporizador de DISPARO ÚNICO (one-shot) que apaga a tela. É reiniciado a
+// cada atividade, então a tela apaga EXATAMENTE no timeout após o último
+// clique (preciso, ao contrário de checar no laço de 5 s).
+static esp_timer_handle_t s_timer_tela = NULL;
+
+// Marca "houve atividade agora": guarda o instante (para a trava anti-corrida
+// no callback do timer) e REINICIA o temporizador one-shot.
 static void registrar_atividade(void)
 {
     s_ultima_atividade_us = esp_timer_get_time();
+    if (s_timer_tela == NULL) {
+        return;
+    }
+    (void)esp_timer_stop(s_timer_tela);  // se não estava rodando, devolve erro — ok ignorar
+    esp_timer_start_once(s_timer_tela, (uint64_t)CONFIG_SW_TELA_TIMEOUT_MS * 1000);
 }
 
 // Converte uma data do calendário (UTC) em "epoch" = segundos desde
@@ -145,6 +155,20 @@ static void tela_acordar(const char *motivo)
     xSemaphoreGive(s_power_mux);
 }
 
+// Callback do temporizador one-shot: dispara uma vez, CONFIG_SW_TELA_TIMEOUT_MS
+// após a última atividade. Roda na task do esp_timer (contexto normal — pode
+// mexer na tela). Trava anti-corrida: se um clique chegou quase junto com o
+// disparo, ele já reiniciou o timer; conferimos pelo instante da última
+// atividade e, se foi recente, não apagamos (deixamos o novo timer agir).
+static void timer_apagar_cb(void *arg)
+{
+    int64_t inativo_us = esp_timer_get_time() - s_ultima_atividade_us;
+    if (inativo_us < (int64_t)CONFIG_SW_TELA_TIMEOUT_MS * 1000 - 50000) {  // margem 50 ms
+        return;
+    }
+    tela_dormir();
+}
+
 // Callback do botão BOOT. Roda na task do bsp_button (não na ISR), então é
 // seguro logar e mexer na tela (inclusive os 120 ms de espera do wake). Cada
 // clique conta como atividade (reinicia o timeout) e, se a tela estiver
@@ -218,13 +242,21 @@ void app_main(void)
     }
 
     // --- Botão BOOT + gerenciador de energia da tela (Fase 4) ---
-    // Mutex das transições de energia e marca inicial de atividade (o boot
-    // conta como atividade, para a tela não apagar logo de cara). Depois sobe o
-    // botão: cada clique acorda a tela e reinicia o timeout (ao_clicar_botao).
+    // Mutex das transições de energia + temporizador one-shot que apaga a tela.
     s_power_mux = xSemaphoreCreateMutex();
     if (s_power_mux == NULL) {
-        ESP_LOGE(TAG, "sem memória para o mutex de energia (timeout desabilitado)");
+        ESP_LOGE(TAG, "sem memória para o mutex de energia");
     }
+    const esp_timer_create_args_t timer_args = {
+        .callback = timer_apagar_cb,
+        .name = "tela_off",
+    };
+    if (esp_timer_create(&timer_args, &s_timer_tela) != ESP_OK) {
+        ESP_LOGE(TAG, "falha ao criar o temporizador da tela");
+    }
+    // Arma a 1ª contagem: o boot conta como atividade (a tela apaga sozinha
+    // CONFIG_SW_TELA_TIMEOUT_MS depois, se ninguém clicar). Depois sobe o botão:
+    // cada clique reinicia essa contagem e acorda a tela, se dormindo.
     registrar_atividade();
     if (bsp_button_init(ao_clicar_botao) != ESP_OK) {
         ESP_LOGW(TAG, "falha ao iniciar o botão");
@@ -288,14 +320,8 @@ void app_main(void)
             }
         }
 
-        // Energia da tela: apaga se passou do timeout sem atividade. O botão
-        // (noutra task) acorda na hora; aqui a granularidade é a do laço (5 s).
-        if (s_tela_ok && !s_tela_dormindo) {
-            int64_t inativo_us = esp_timer_get_time() - s_ultima_atividade_us;
-            if (inativo_us >= (int64_t)TELA_TIMEOUT_MS * 1000) {
-                tela_dormir();
-            }
-        }
+        // (A tela apaga pelo temporizador one-shot, não aqui no laço — ver
+        // registrar_atividade() e timer_apagar_cb().)
 
         // Pausa 5 s. pdMS_TO_TICKS converte milissegundos em "ticks" do FreeRTOS.
         // Diferente de um loop vazio, vTaskDelay libera o processador (economiza energia).

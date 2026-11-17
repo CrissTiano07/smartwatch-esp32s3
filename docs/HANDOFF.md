@@ -3,7 +3,7 @@
 > Atualizar ao **fim de cada sessão**. Primeira coisa que a IA lê, junto com `CLAUDE.md`.
 
 **Última atualização:** 2026-11-17
-**Fase atual:** 4 concluída ✅ (estados de energia: timeout apaga, botão acende) → próxima: 5 (sono leve/profundo + medição)
+**Fase atual:** 4 🟨 em validação (estados de energia: timeout apaga, botão acende). Falta o Cristiano validar na placa o ajuste do timeout (5 s via Kconfig + esp_timer one-shot). Depois: Fase 5 (sono leve/profundo + medição).
 
 ## Feito
 - Documentação inicial: CLAUDE.md, SPEC, HARDWARE, ROADMAP, DECISIONS, HANDOFF
@@ -23,7 +23,8 @@
   - **Botão BOOT (GPIO0):** componente `bsp_button`. ISR nas 2 bordas só enfileira (sem log na ISR); task faz **antirrebote por nível** (espera 30 ms, lê o GPIO, conta clique só na transição solto→pressionado). Corrige o repique da soltura (segurar 1 s e soltar = 1 clique). Botões documentados em HARDWARE.md; **PWR ainda em aberto** (caminho EXIO6/AXP2101 não confirmado — precisa do esquemático).
   - **Sleep/wake da tela:** `bsp_display_sleep()` = pausa LVGL (`lvgl_port_stop`) + display off (0x28) + sleep-in (0x10); `bsp_display_wake()` = sleep-out (0x11) + 120 ms + display on (0x29) + `lvgl_port_resume`. `bsp_display_redraw()` = `lv_obj_invalidate` da tela inteira.
   - **Gerenciador (main):** timeout de inatividade apaga; clique acorda (na hora, pela task do botão) e reinicia o timeout; transições protegidas por mutex. No wake, repinta a hora atual (`mostrar_hora(true)`) + `redraw`. Decisão de produto: apagar é **só por timeout** (DECISIONS #11, SPEC R5/R6).
-  - Na placa (2026-11-17): apaga aos 15 s; botão acorda 1× sem repique; hora certa ao acordar mesmo depois de virar 1+ minutos dormindo ✅. **Timeout de teste = 15 s** (`TELA_TIMEOUT_MS` no `main.c`); ajustar o valor "de produto" depois.
+  - Na placa (2026-11-17): botão acorda 1× sem repique; hora certa ao acordar mesmo depois de virar 1+ minutos dormindo ✅ (validado com timeout de 15 s na 1ª versão).
+  - **Ajuste (aguardando validação):** timeout agora vem do menuconfig **`CONFIG_SW_TELA_TIMEOUT_MS` (padrão 5000 ms**, menu "Smartwatch - Energia") e é contado por um **esp_timer one-shot** reiniciado a cada clique — apaga com precisão (antes era checado no laço de 5 s, apagando entre 5 e 10 s). Critério a validar: após acender no botão, apaga em 5 s (±0,5 s) pelo log.
 
 ## Como abrir o ambiente (todo terminal novo)
 ```
@@ -41,9 +42,10 @@ Quando o RTC guarda uma hora errada mas marcada como válida (OS=0, ex.: resquí
 > A semente nasce alguns segundos atrasada (tempo de compilar/gravar). O NTP da Fase 6 corrige o valor absoluto.
 
 ## Próximo passo
+- **Validar o ajuste do timeout** (5 s via Kconfig + one-shot) na placa — critério: apaga em 5 s (±0,5 s) após acender no botão. Depois, fechar a Fase 4 de novo (ROADMAP/HANDOFF).
 - **Fase 5 — sono leve/profundo + medição:** medir o consumo de cada estado (ATIVO / tela apagada / sono) e anotar em `HARDWARE.md`. Hoje a tela apaga mas a CPU segue no laço de 5 s — avaliar light/deep sleep.
 - Oportunidades já mapeadas para a Fase 5 (ver "Notas da sessão"): interrupção de minuto do PCF85063 no GPIO39 (trocar o polling do relógio); desligar `CONFIG_SPIRAM_MEMTEST` p/ acelerar boot; GPIO0 é RTC-capable → serve p/ acordar do deep sleep.
-- Ajustar `TELA_TIMEOUT_MS` (hoje 15 s de teste) para o valor de produto.
+- Timeout da tela é configurável em `idf.py menuconfig` → "Smartwatch - Energia" (`CONFIG_SW_TELA_TIMEOUT_MS`).
 
 ## Como a IA roda o build nesta máquina
 `idf.py.exe build` pela ferramenta **PowerShell** (no Git Bash, `cmd /c` sofre path-mangling do MSYS e abre cmd interativo). Flash/monitor seguem com o Cristiano.

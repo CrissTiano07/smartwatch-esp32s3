@@ -1,0 +1,18 @@
+# Opções de projeto da energia da tela, visíveis no `idf.py menuconfig`.
+# .projbuild faz o menu aparecer no nível de cima do menuconfig.
+
+menu "Smartwatch - Energia"
+
+    config SW_TELA_TIMEOUT_MS
+        int "Tempo sem interação até apagar a tela (ms)"
+        default 5000
+        range 1000 600000
+        help
+            Depois deste tempo sem clique do botão, a tela apaga sozinha.
+            A contagem é feita por um temporizador de disparo único
+            (esp_timer one-shot), reiniciado a cada clique — então a tela
+            apaga com precisão neste tempo.
+
+            Relógios comerciais costumam usar de 5 a 15 s. Padrão: 5000 ms.
+
+endmenu
