@@ -1,12 +1,14 @@
 /*
- * main.c — Fase 2: barramento I2C + AXP2101 + RTC PCF85063.
+ * main.c — I2C + AXP2101 (bateria) + RTC PCF85063 + tela (LVGL).
  *
- * Critério de aceite da Fase 2: grava a hora, reinicia e a hora continua
- * certa no log (e marcada como válida), sem Wi-Fi. A bateria segue sendo
- * logada da Fase 1.
+ * Fase 3 (Passo 4): mostra HH:MM na tela, vindo do RTC, no horário de
+ * Fortaleza (UTC-3), atualizando quando o minuto vira. A hora interna
+ * continua em UTC; o fuso entra só na exibição. Bateria e RTC seguem no log.
  */
 
 #include <inttypes.h>            // PRIu32/PRIu64: imprimir inteiros de tamanho fixo no printf
+#include <stdlib.h>              // setenv: define o fuso (TZ) para a exibição
+#include <time.h>                // struct tm, timegm, localtime_r, strftime
 #include "freertos/FreeRTOS.h"   // sistema operacional de tempo real do ESP32 (sempre antes de task.h)
 #include "freertos/task.h"       // vTaskDelay: pausar sem travar o processador
 #include "esp_log.h"             // ESP_LOGI/ESP_LOGW/ESP_LOGE: log com nível e etiqueta
@@ -15,6 +17,7 @@
 #include "esp_system.h"          // esp_get_free_heap_size, esp_get_idf_version
 #include "esp_timer.h"           // esp_timer_get_time: microssegundos desde o boot
 #include "esp_psram.h"           // esp_psram_get_size: tamanho da PSRAM detectada
+#include "esp_heap_caps.h"       // heap_caps_get_free_size: heap livre por tipo (interno/PSRAM)
 #include "bsp_i2c.h"             // nosso barramento I2C compartilhado
 #include "axp2101.h"             // nosso driver do chip de energia
 #include "pcf85063.h"            // nosso driver do RTC (hora)
@@ -23,6 +26,40 @@
 // Etiqueta que aparece no começo de cada linha de log: "I (123) main: ..."
 // Ajuda a saber de qual módulo veio a mensagem quando o projeto crescer.
 static const char *TAG = "main";
+
+// Converte uma data do calendário (UTC) em "epoch" = segundos desde
+// 1970-01-01. É o inverso do gmtime. A newlib do ESP-IDF não traz timegm(),
+// então calculamos aqui. A conta dos DIAS usa um algoritmo conhecido (civil
+// days, de Howard Hinnant) que já lida com anos bissextos corretamente.
+static time_t epoch_de_utc(int ano, int mes, int dia,
+                           int hora, int min, int seg)
+{
+    // Trata jan/fev como meses 13/14 do ano anterior (simplifica o bissexto).
+    ano -= (mes <= 2);
+    long era = (ano >= 0 ? ano : ano - 399) / 400;
+    unsigned yoe = (unsigned)(ano - era * 400);                 // ano dentro da "era" (0..399)
+    unsigned doy = (153 * (mes + (mes > 2 ? -3 : 9)) + 2) / 5 + dia - 1; // dia do ano
+    unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;       // dia dentro da era
+    long dias = era * 146097 + (long)doe - 719468;             // dias desde 1970-01-01
+    return (time_t)(((dias * 24 + hora) * 60 + min) * 60 + seg);
+}
+
+// Converte a hora do RTC (que é SEMPRE UTC) para o horário de Fortaleza e
+// escreve "HH:MM" em 'buf'. Devolve o minuto local (0..59) para sabermos
+// quando o minuto virou. A regra do projeto é: hora interna em UTC, fuso só
+// na exibição — por isso a conversão acontece aqui, na hora de mostrar.
+//
+// epoch_de_utc(): monta o "epoch" a partir dos campos UTC do RTC.
+// localtime_r(): converte o epoch de volta para hora local, aplicando o TZ
+// que configuramos no app_main ("<-03>3" = UTC-3, Fortaleza, sem verão).
+static int hhmm_fortaleza(const pcf85063_hora_t *h, char *buf, size_t n)
+{
+    time_t epoch = epoch_de_utc(h->ano, h->mes, h->dia, h->hora, h->min, h->seg);
+    struct tm local;
+    localtime_r(&epoch, &local);
+    strftime(buf, n, "%H:%M", &local);
+    return local.tm_min;
+}
 
 // app_main é o "main()" do ESP-IDF: o sistema chama esta função depois do boot.
 void app_main(void)
@@ -69,16 +106,26 @@ void app_main(void)
         }
     }
 
-    // --- Tela (Fase 3, Passo 3): LVGL com texto fixo ---
-    // O painel sobe primeiro; depois o LVGL assume o desenho e mostra um texto.
-    // Sem acento de propósito: a fonte Montserrat padrão não tem caracteres
-    // pt-BR (ver pendência no HANDOFF). Não depende do I2C nem do AXP2101.
-    if (bsp_display_init() == ESP_OK && bsp_display_lvgl_init() == ESP_OK) {
-        bsp_display_set_text("Smartwatch ok");
-        ESP_LOGI(TAG, "tela: texto fixo");
+    // --- Tela (Fase 3, Passo 4): relógio HH:MM do RTC ---
+    // O painel sobe primeiro; depois o LVGL assume o desenho. O relógio em si
+    // é atualizado no laço abaixo, quando o minuto vira. Não depende do AXP2101.
+    bool tela_ok = (bsp_display_init() == ESP_OK && bsp_display_lvgl_init() == ESP_OK);
+    if (tela_ok) {
+        // Heap livre logo após subir o LVGL, separado por tipo de memória, para
+        // medirmos quanto o LVGL consumiu (buffers de desenho vão na RAM interna).
+        ESP_LOGI(TAG, "heap após LVGL: interno %u B | PSRAM %u B",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+        bsp_display_set_text("--:--");  // placeholder até a 1ª leitura do RTC
     } else {
         ESP_LOGE(TAG, "falha ao iniciar a tela");
     }
+
+    // Fuso de Fortaleza (UTC-3, sem horário de verão). Só afeta a EXIBIÇÃO;
+    // a hora interna (RTC) continua em UTC. Formato POSIX: "<-03>3".
+    setenv("TZ", "<-03>3", 1);
+    tzset();
+    int ultimo_min = -1;  // -1 = ainda não mostramos nenhum minuto
 
     // --- Batimento: prova que o programa continua vivo ---
     while (1) {
@@ -111,10 +158,21 @@ void app_main(void)
             esp_err_t e1 = pcf85063_ler(&h);
             esp_err_t e2 = pcf85063_hora_valida(&valida);
             if (e1 == ESP_OK && e2 == ESP_OK) {
-                // Formato ISO, sempre UTC (o fuso entra só na tela, na Fase 3).
+                // Formato ISO, sempre UTC (o fuso entra só na tela).
                 ESP_LOGI(TAG, "RTC: %04u-%02u-%02u %02u:%02u:%02u UTC (%s)",
                          h.ano, h.mes, h.dia, h.hora, h.min, h.seg,
                          valida ? "válida" : "INVÁLIDA");
+
+                // Relógio na tela: converte para Fortaleza e, se o minuto
+                // mudou, atualiza o label (evita redesenhar à toa a cada 5 s).
+                if (tela_ok) {
+                    char hhmm[6];  // "HH:MM" + terminador
+                    int min_local = hhmm_fortaleza(&h, hhmm, sizeof(hhmm));
+                    if (min_local != ultimo_min) {
+                        bsp_display_set_text(hhmm);
+                        ultimo_min = min_local;
+                    }
+                }
             } else {
                 ESP_LOGW(TAG, "leitura do RTC falhou");
             }
