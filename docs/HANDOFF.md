@@ -3,7 +3,8 @@
 > Atualizar ao **fim de cada sessão**. Primeira coisa que a IA lê, junto com `CLAUDE.md`.
 
 **Última atualização:** 2026-11-18
-**Fase atual:** 4 concluída ✅ (estados de energia: timeout apaga, botão acende) → próxima: **5 (dígitos grandes)**, depois a escada de bateria: 5.1 sono leve (≥1 dia) → levantar o braço (IMU) → 5.2 sono profundo (≥3 dias) → 5.3 ajuste fino (5 dias). Ordem detalhada no ROADMAP.
+**Fase atual:** 5 (dígitos grandes) concluída ✅ na placa → próxima: escada de bateria: **5.1 sono leve (≥1 dia)** → levantar o braço (IMU) → 5.2 sono profundo (≥3 dias) → 5.3 ajuste fino (5 dias). Ordem detalhada no ROADMAP.
+**Pendente (não commitado):** refino do relógio no [main/main.c](../main/main.c) — `hhmm_fortaleza` formata HH e MM separados com `snprintf("%02d")` em vez de cortar "HH:MM" com `'\0'`. Compila; aguarda flash/validação (mesma tela de agora) antes do commit.
 
 ## Feito
 - Documentação inicial: CLAUDE.md, SPEC, HARDWARE, ROADMAP, DECISIONS, HANDOFF
@@ -26,6 +27,11 @@
   - **Timeout preciso e configurável:** vem do menuconfig **`CONFIG_SW_TELA_TIMEOUT_MS` (padrão 5000 ms**, menu "Smartwatch - Energia") e é contado por um **esp_timer one-shot** reiniciado a cada clique.
   - **Arquitetura:** uma **task de energia única** consome uma **fila de eventos** (`EV_CLIQUE`/`EV_TIMEOUT`); o callback do botão e o do esp_timer só enfileiram (não bloqueiam suas tasks). Sendo a única dona das transições, dispensa mutex e trava de corrida.
   - Na placa (2026-11-17): boot apaga em ~5 s; após o clique apaga em **Δ≈5 s** (±0,5 s) pelo log; cliques seguidos contam do último; botão acorda 1× sem repique; hora certa ao acordar mesmo depois de virar 1+ minutos dormindo ✅.
+- **Fase 5 — dígitos grandes concluída ✅:**
+  - **Fonte própria:** componente `ui_fonts` com `font_digits_180` (Montserrat Regular **180 px, 4 bpp, só `0-9`**), gerada por `npx lv_font_conv@1.5.3`. Reproduzível: `.ttf` + OFL em `tools/fonts/` e comando exato em `components/ui_fonts/README.md`. Decisão em DECISIONS #12.
+  - **Relógio empilhado:** `bsp_display` cria **dois rótulos** com essa fonte — HH acima do centro, MM abaixo (`DIG_DY 70` px), sem `:`. Nova API `bsp_display_set_hhmm(hh, mm)` no lugar de `bsp_display_set_text`.
+  - Na placa (2026-11-18): HH em cima e MM embaixo, grandes, centralizados, sem sobrepor; minuto virando; hora certa ao acordar; `DIG_DY` ok sem ajuste ✅.
+  - **Aceito por ora (refino futuro):** dígitos proporcionais deslizam de lado ao trocar `1`↔outro dígito → largura fixa fica para depois (DECISIONS #12).
 
 ## Linha de base de bateria (medir contra isto)
 - **2026-11-17 — teste de uso real:** **4h40** de autonomia (11:40 → 16:20), com a **CPU sempre ativa** (laço de 5 s, sem sono) e a tela apagando só por timeout. É o estado de hoje (fim da Fase 4) e o **ponto de partida** a superar na Fase 5.
@@ -49,7 +55,7 @@ Quando o RTC guarda uma hora errada mas marcada como válida (OS=0, ex.: resquí
 > A semente nasce alguns segundos atrasada (tempo de compilar/gravar). O NTP da Fase 6 corrige o valor absoluto.
 
 ## Próximo passo
-- **Fase 5 — dígitos grandes (agora):** HH:MM em dígitos grandes ocupando boa parte da tela. Avaliar fonte Montserrat 48 do LVGL vs. fonte própria (`lv_font_conv`) só com `0-9` e `:`. Plano antes de codar.
+- **Refino do relógio (commit pendente):** `main.c` já formata HH/MM com `snprintf("%02d")` (compila); falta flash/validação (mesma tela) para então commitar.
 - **Depois, a escada de bateria** (cada degrau mede o consumo real e anota em `HARDWARE.md` antes de avançar):
   - **5.1 sono leve** (CPU dorme entre eventos, tela apagada) → autonomia ≥ 1 dia.
   - **Levantar o braço (IMU QMI8658)** → gesto acende a tela (entra antes do deep sleep).

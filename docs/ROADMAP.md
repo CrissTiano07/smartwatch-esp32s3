@@ -9,7 +9,7 @@ Regra: só avança com o critério de aceite cumprido **na placa**. Cada fase = 
 | 2 | RTC PCF85063 | Grava hora · reset · hora continua certa no log, sem Wi-Fi | ✅ |
 | 3 | Tela + LVGL mínimo | Relógio digital HH:MM na tela, vindo do RTC | ✅ |
 | 4 | Estados de energia | Tela apaga por timeout · botão/toque acende | ✅ |
-| 5 | **Dígitos grandes** | HH:MM em dígitos grandes ocupando boa parte da tela, vindos do RTC | ⬜ |
+| 5 | **Dígitos grandes** | HH:MM em dígitos grandes ocupando boa parte da tela, vindos do RTC | ✅ |
 | 5.1 | Sono leve | CPU dorme entre eventos (tela apagada); mede o consumo · **autonomia ≥ 1 dia** | ⬜ |
 | — | Levantar o braço (IMU) | Gesto de erguer o pulso acende a tela (QMI8658) | ⬜ |
 | 5.2 | Sono profundo | Deep sleep com tela apagada, acordando por **BOOT / alarme RTC / IMU** · **autonomia ≥ 3 dias** | ⬜ |
