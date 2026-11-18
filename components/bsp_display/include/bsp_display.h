@@ -26,15 +26,16 @@ esp_err_t bsp_display_init(void);
 esp_err_t bsp_display_fill_rgb565(uint16_t color);
 
 // Sobe o LVGL sobre o painel (task do LVGL, tick e thread-safety via
-// esp_lvgl_port) e cria um rótulo (label) central. Chamar depois de
-// bsp_display_init(). A partir daqui o desenho é feito pelo LVGL, não mais
-// por bsp_display_fill_rgb565().
+// esp_lvgl_port) e cria DOIS rótulos empilhados (HH em cima, MM embaixo) com a
+// fonte de dígitos grandes. Chamar depois de bsp_display_init(). A partir daqui
+// o desenho é feito pelo LVGL, não mais por bsp_display_fill_rgb565().
 esp_err_t bsp_display_lvgl_init(void);
 
-// Troca o texto do rótulo central, de forma segura entre tarefas.
-// IMPORTANTE: as fontes Montserrat padrão do LVGL NÃO têm acentos — use texto
-// sem acento (ver pendência no HANDOFF sobre fonte própria pt-BR).
-esp_err_t bsp_display_set_text(const char *txt);
+// Atualiza o relógio: 'hh' e 'mm' são strings de 2 dígitos ("09", "47"), que
+// vão nos dois rótulos empilhados. Seguro entre tarefas. Sem ":" — o layout é
+// empilhado e a fonte grande (font_digits_180) tem só os dígitos 0-9
+// (ver docs/DECISIONS.md #12). Passar "" nos dois deixa a tela em branco.
+esp_err_t bsp_display_set_hhmm(const char *hh, const char *mm);
 
 // Põe a tela para dormir (economia de energia, Fase 4): PAUSA o LVGL, desliga
 // a saída do painel (display off, 0x28) e manda o painel entrar em sleep (0x10).

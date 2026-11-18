@@ -144,7 +144,8 @@ static void mostrar_hora(bool forcar)
     char hhmm[6];  // "HH:MM" + terminador
     int min_local = hhmm_fortaleza(&h, hhmm, sizeof(hhmm));
     if (forcar || min_local != s_ultimo_min) {
-        bsp_display_set_text(hhmm);
+        hhmm[2] = '\0';                      // corta "HH:MM" em "HH" + "MM"
+        bsp_display_set_hhmm(hhmm, &hhmm[3]); // HH em cima, MM embaixo
         s_ultimo_min = min_local;
     }
 }
@@ -260,7 +261,7 @@ void app_main(void)
         ESP_LOGI(TAG, "heap após LVGL: interno %u B | PSRAM %u B",
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-        bsp_display_set_text("--:--");  // placeholder até a 1ª leitura do RTC
+        bsp_display_set_hhmm("", "");  // tela em branco até a 1ª leitura do RTC
     } else {
         ESP_LOGE(TAG, "falha ao iniciar a tela");
     }
@@ -340,7 +341,8 @@ void app_main(void)
                     char hhmm[6];  // "HH:MM" + terminador
                     int min_local = hhmm_fortaleza(&h, hhmm, sizeof(hhmm));
                     if (min_local != s_ultimo_min) {
-                        bsp_display_set_text(hhmm);
+                        hhmm[2] = '\0';                      // "HH:MM" -> "HH" + "MM"
+                        bsp_display_set_hhmm(hhmm, &hhmm[3]); // HH em cima, MM embaixo
                         s_ultimo_min = min_local;
                     }
                 }

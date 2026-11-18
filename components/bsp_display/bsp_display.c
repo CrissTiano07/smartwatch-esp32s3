@@ -13,6 +13,7 @@
 #include "esp_log.h"
 #include "esp_lvgl_port.h"         // port oficial: liga o LVGL ao painel esp_lcd
 #include "lvgl.h"                  // API gráfica (label, cores, fontes)
+#include "ui_fonts.h"              // fonte própria de dígitos grandes (font_digits_180)
 #include "freertos/FreeRTOS.h"     // base do RTOS (antes de task.h)
 #include "freertos/task.h"         // vTaskDelay: esperar o painel estabilizar no wake
 
@@ -46,7 +47,15 @@ static uint8_t s_strip[BSP_DISP_H_RES * STRIP_H * 2];
 
 static esp_lcd_panel_handle_t    s_panel = NULL;
 static esp_lcd_panel_io_handle_t s_io = NULL;     // guardado p/ o esp_lvgl_port
-static lv_obj_t                 *s_label = NULL;  // rótulo central do LVGL
+// Relógio em DOIS rótulos empilhados: HH em cima, MM embaixo. Sem ":" porque a
+// fonte própria tem só os dígitos 0-9 (ver docs/DECISIONS.md #12).
+static lv_obj_t                 *s_label_hh = NULL;  // horas (metade de cima)
+static lv_obj_t                 *s_label_mm = NULL;  // minutos (metade de baixo)
+
+// Deslocamento vertical de cada rótulo a partir do centro. A fonte tem ~129 px
+// de altura; ~70 px para cada lado empilha HH/MM com uma folga, mantendo o
+// bloco centralizado na tela de 502 px.
+#define DIG_DY 70
 
 // Sequência de init do painel — copiada VERBATIM da BSP oficial da Waveshare
 // (esp32_s3_touch_amoled_2_06.c). Formato: {comando, dados, nº de bytes, atraso_ms}.
@@ -210,27 +219,41 @@ esp_err_t bsp_display_lvgl_init(void)
     lv_obj_t *scr = lv_display_get_screen_active(disp);
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);  // fundo preto (AMOLED)
 
-    s_label = lv_label_create(scr);
-    lv_obj_set_style_text_color(s_label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(s_label, &lv_font_montserrat_28, 0);
-    lv_label_set_text(s_label, "");
-    lv_obj_center(s_label);
+    // Dois rótulos com a fonte grande (font_digits_180), brancos, empilhados e
+    // centralizados: HH acima do centro, MM abaixo. Começam vazios; o relógio
+    // os preenche na 1ª leitura do RTC.
+    s_label_hh = lv_label_create(scr);
+    lv_obj_set_style_text_color(s_label_hh, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_label_hh, &font_digits_180, 0);
+    lv_label_set_text(s_label_hh, "");
+    lv_obj_align(s_label_hh, LV_ALIGN_CENTER, 0, -DIG_DY);
+
+    s_label_mm = lv_label_create(scr);
+    lv_obj_set_style_text_color(s_label_mm, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_label_mm, &font_digits_180, 0);
+    lv_label_set_text(s_label_mm, "");
+    lv_obj_align(s_label_mm, LV_ALIGN_CENTER, 0, DIG_DY);
     lvgl_port_unlock();
 
     ESP_LOGI(TAG, "LVGL pronto");
     return ESP_OK;
 }
 
-esp_err_t bsp_display_set_text(const char *txt)
+esp_err_t bsp_display_set_hhmm(const char *hh, const char *mm)
 {
-    if (s_label == NULL) {
+    if (s_label_hh == NULL || s_label_mm == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
     if (!lvgl_port_lock(0)) {
         return ESP_ERR_TIMEOUT;
     }
-    lv_label_set_text(s_label, txt);   // o LVGL copia a string internamente
-    lv_obj_center(s_label);            // recentraliza (o tamanho pode mudar)
+    lv_label_set_text(s_label_hh, hh);   // o LVGL copia a string internamente
+    lv_label_set_text(s_label_mm, mm);
+    // Recentraliza cada linha: a largura muda conforme os dígitos (o '1' é mais
+    // estreito). O deslize horizontal é aceito por ora (DECISIONS #12); aqui só
+    // garantimos que HH e MM ficam centrados no seu eixo e empilhados.
+    lv_obj_align(s_label_hh, LV_ALIGN_CENTER, 0, -DIG_DY);
+    lv_obj_align(s_label_mm, LV_ALIGN_CENTER, 0, DIG_DY);
     lvgl_port_unlock();
     return ESP_OK;
 }
@@ -291,18 +314,18 @@ esp_err_t bsp_display_wake(void)
 
 esp_err_t bsp_display_redraw(void)
 {
-    if (s_label == NULL) {
+    if (s_label_hh == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
     if (!lvgl_port_lock(0)) {
         return ESP_ERR_TIMEOUT;
     }
     // Marca a tela INTEIRA como "suja" para o LVGL repintar tudo (fundo +
-    // rótulo). Necessário depois do wake: enquanto o painel dormia, ele
+    // rótulos). Necessário depois do wake: enquanto o painel dormia, ele
     // ignorou o que o LVGL desenhou, então a memória do painel pode estar
-    // desatualizada. lv_obj_get_screen(s_label) devolve a tela que contém o
+    // desatualizada. lv_obj_get_screen(s_label_hh) devolve a tela que contém o
     // rótulo — sem depender de qual é o display "padrão".
-    lv_obj_invalidate(lv_obj_get_screen(s_label));
+    lv_obj_invalidate(lv_obj_get_screen(s_label_hh));
     lvgl_port_unlock();
     return ESP_OK;
 }
