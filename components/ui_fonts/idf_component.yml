@@ -1,0 +1,6 @@
+# Dependências do componente de fontes da UI.
+# Versão FIXA com "==" para build reproduzível (mesma versão usada no bsp_display).
+# O gerenciador de componentes transforma isto em REQUIRES do componente, então
+# o .c da fonte passa a enxergar "lvgl.h" e os tipos lv_font_t no build.
+dependencies:
+  lvgl/lvgl: "==9.5.0"
