@@ -58,3 +58,8 @@ só então peça aprovação.
 ## Commits
 Formato: `tipo(escopo): resumo` — tipos: `feat`, `fix`, `docs`, `refactor`, `chore`, `test`.
 Exemplo: `feat(rtc): lê e grava hora no PCF85063`
+
+**Commit de feature só depois da validação do Cristiano na placa.** A IA
+implementa, compila (`idf.py build`) e **espera o OK no hardware real** antes de
+commitar. Exceção: docs que apenas fecham uma etapa já validada podem ser
+commitados.
