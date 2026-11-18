@@ -113,19 +113,23 @@ static time_t epoch_de_utc(int ano, int mes, int dia,
 }
 
 // Converte a hora do RTC (que é SEMPRE UTC) para o horário de Fortaleza e
-// escreve "HH:MM" em 'buf'. Devolve o minuto local (0..59) para sabermos
-// quando o minuto virou. A regra do projeto é: hora interna em UTC, fuso só
-// na exibição — por isso a conversão acontece aqui, na hora de mostrar.
+// escreve as horas em 'hh' e os minutos em 'mm', 2 dígitos cada ("09", "47").
+// Os buffers precisam de pelo menos 3 bytes ("HH" + terminador). Devolve o
+// minuto local (0..59) para sabermos quando o minuto virou. Regra do projeto:
+// hora interna em UTC, fuso só na exibição — por isso a conversão é aqui.
 //
 // epoch_de_utc(): monta o "epoch" a partir dos campos UTC do RTC.
 // localtime_r(): converte o epoch de volta para hora local, aplicando o TZ
 // que configuramos no app_main ("<-03>3" = UTC-3, Fortaleza, sem verão).
-static int hhmm_fortaleza(const pcf85063_hora_t *h, char *buf, size_t n)
+// Formatamos HH e MM SEPARADOS (snprintf "%02d") direto de tm_hour/tm_min
+// porque o relógio usa dois rótulos empilhados, sem ":".
+static int hhmm_fortaleza(const pcf85063_hora_t *h, char *hh, char *mm)
 {
     time_t epoch = epoch_de_utc(h->ano, h->mes, h->dia, h->hora, h->min, h->seg);
     struct tm local;
     localtime_r(&epoch, &local);
-    strftime(buf, n, "%H:%M", &local);
+    snprintf(hh, 3, "%02d", local.tm_hour);
+    snprintf(mm, 3, "%02d", local.tm_min);
     return local.tm_min;
 }
 
@@ -141,11 +145,10 @@ static void mostrar_hora(bool forcar)
     if (pcf85063_ler(&h) != ESP_OK) {
         return;
     }
-    char hhmm[6];  // "HH:MM" + terminador
-    int min_local = hhmm_fortaleza(&h, hhmm, sizeof(hhmm));
+    char hh[3], mm[3];  // "HH"/"MM" + terminador cada
+    int min_local = hhmm_fortaleza(&h, hh, mm);
     if (forcar || min_local != s_ultimo_min) {
-        hhmm[2] = '\0';                      // corta "HH:MM" em "HH" + "MM"
-        bsp_display_set_hhmm(hhmm, &hhmm[3]); // HH em cima, MM embaixo
+        bsp_display_set_hhmm(hh, mm);   // HH em cima, MM embaixo
         s_ultimo_min = min_local;
     }
 }
@@ -338,11 +341,10 @@ void app_main(void)
                 // tela_acordar() repinta a hora na hora. Se o minuto mudou,
                 // atualiza o label (evita redesenhar à toa a cada 5 s).
                 if (s_tela_ok && !s_tela_dormindo) {
-                    char hhmm[6];  // "HH:MM" + terminador
-                    int min_local = hhmm_fortaleza(&h, hhmm, sizeof(hhmm));
+                    char hh[3], mm[3];  // "HH"/"MM" + terminador cada
+                    int min_local = hhmm_fortaleza(&h, hh, mm);
                     if (min_local != s_ultimo_min) {
-                        hhmm[2] = '\0';                      // "HH:MM" -> "HH" + "MM"
-                        bsp_display_set_hhmm(hhmm, &hhmm[3]); // HH em cima, MM embaixo
+                        bsp_display_set_hhmm(hh, mm);   // HH em cima, MM embaixo
                         s_ultimo_min = min_local;
                     }
                 }
