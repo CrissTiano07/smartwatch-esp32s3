@@ -24,8 +24,10 @@ Relógio de pulso que **mostra a hora certa sem depender de Wi-Fi** e dura o má
 
 ## Meta de energia
 - Bateria: 400 mAh (confirmar)
-- Meta: 5 dias → consumo médio ≤ ~3,3 mA
-- Implica: tela apagada na maior parte do tempo + sono leve/profundo
+- **Perfil de uso típico:** ~100 ativações/dia, **5 s** cada, **sem Wi-Fi**
+- **Meta: 5 dias** com esse perfil → consumo médio ≤ ~3,3 mA (400 mAh ÷ 120 h)
+- Implica: tela apagada na maior parte do tempo + a CPU **dormindo entre eventos** (sono leve/profundo)
+- **Linha de base (2026-11-17):** 4h40 com a CPU **sempre ativa** (sem sono) — ponto de partida a superar; detalhes no HANDOFF
 
 ## Estados de energia
 | Estado | Tela | CPU | Sai por |

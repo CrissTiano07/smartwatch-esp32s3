@@ -2,8 +2,8 @@
 
 > Atualizar ao **fim de cada sessão**. Primeira coisa que a IA lê, junto com `CLAUDE.md`.
 
-**Última atualização:** 2026-11-17
-**Fase atual:** 4 concluída ✅ (estados de energia: timeout apaga, botão acende) → próxima: 5 (sono leve/profundo + medição)
+**Última atualização:** 2026-11-18
+**Fase atual:** 4 concluída ✅ (estados de energia: timeout apaga, botão acende) → próxima: **5 (dígitos grandes)**, depois a escada de bateria: 5.1 sono leve (≥1 dia) → levantar o braço (IMU) → 5.2 sono profundo (≥3 dias) → 5.3 ajuste fino (5 dias). Ordem detalhada no ROADMAP.
 
 ## Feito
 - Documentação inicial: CLAUDE.md, SPEC, HARDWARE, ROADMAP, DECISIONS, HANDOFF
@@ -27,6 +27,12 @@
   - **Arquitetura:** uma **task de energia única** consome uma **fila de eventos** (`EV_CLIQUE`/`EV_TIMEOUT`); o callback do botão e o do esp_timer só enfileiram (não bloqueiam suas tasks). Sendo a única dona das transições, dispensa mutex e trava de corrida.
   - Na placa (2026-11-17): boot apaga em ~5 s; após o clique apaga em **Δ≈5 s** (±0,5 s) pelo log; cliques seguidos contam do último; botão acorda 1× sem repique; hora certa ao acordar mesmo depois de virar 1+ minutos dormindo ✅.
 
+## Linha de base de bateria (medir contra isto)
+- **2026-11-17 — teste de uso real:** **4h40** de autonomia (11:40 → 16:20), com a **CPU sempre ativa** (laço de 5 s, sem sono) e a tela apagando só por timeout. É o estado de hoje (fim da Fase 4) e o **ponto de partida** a superar na Fase 5.
+- **AXP2101:** desligou **antes de a bateria zerar** (corte de proteção/limite de descarga do PMIC, não 0%). Ou seja, os 4h40 não esgotaram a capacidade real.
+- **RTC (PCF85063):** **manteve a hora** mesmo após o AXP cortar — confirma a fonte da verdade da hora independente da alimentação principal (bateria de backup do RTC).
+- **Meta (SPEC):** 5 dias no perfil típico (~100 ativações/dia × 5 s, sem Wi-Fi) → ≤ ~3,3 mA médios. A escada da Fase 5 mede cada degrau na placa.
+
 ## Como abrir o ambiente (todo terminal novo)
 ```
 C:\esp\v5.5.3\esp-idf\export.bat
@@ -43,8 +49,13 @@ Quando o RTC guarda uma hora errada mas marcada como válida (OS=0, ex.: resquí
 > A semente nasce alguns segundos atrasada (tempo de compilar/gravar). O NTP da Fase 6 corrige o valor absoluto.
 
 ## Próximo passo
-- **Fase 5 — sono leve/profundo + medição:** medir o consumo de cada estado (ATIVO / tela apagada / sono) e anotar em `HARDWARE.md`. Hoje a tela apaga mas a CPU segue no laço de 5 s — avaliar light/deep sleep.
-- Oportunidades já mapeadas para a Fase 5 (ver "Notas da sessão"): interrupção de minuto do PCF85063 no GPIO39 (trocar o polling do relógio); desligar `CONFIG_SPIRAM_MEMTEST` p/ acelerar boot; GPIO0 é RTC-capable → serve p/ acordar do deep sleep.
+- **Fase 5 — dígitos grandes (agora):** HH:MM em dígitos grandes ocupando boa parte da tela. Avaliar fonte Montserrat 48 do LVGL vs. fonte própria (`lv_font_conv`) só com `0-9` e `:`. Plano antes de codar.
+- **Depois, a escada de bateria** (cada degrau mede o consumo real e anota em `HARDWARE.md` antes de avançar):
+  - **5.1 sono leve** (CPU dorme entre eventos, tela apagada) → autonomia ≥ 1 dia.
+  - **Levantar o braço (IMU QMI8658)** → gesto acende a tela (entra antes do deep sleep).
+  - **5.2 sono profundo** (deep sleep) acordando por **BOOT / alarme RTC / IMU** → autonomia ≥ 3 dias.
+  - **5.3 ajuste fino** → fechar os 5 dias no perfil típico.
+- Oportunidades já mapeadas para a escada (ver "Notas da sessão"): interrupção de minuto do PCF85063 no GPIO39 (trocar o polling do relógio); desligar `CONFIG_SPIRAM_MEMTEST` p/ acelerar boot; GPIO0 é RTC-capable → serve p/ acordar do deep sleep.
 - Timeout da tela é configurável em `idf.py menuconfig` → "Smartwatch - Energia" (`CONFIG_SW_TELA_TIMEOUT_MS`).
 
 ## Como a IA roda o build nesta máquina
@@ -65,6 +76,7 @@ Quando o RTC guarda uma hora errada mas marcada como válida (OS=0, ex.: resquí
 - `C:\Espressif\tools\python_old`
 
 ## Notas da sessão
+- 2026-11-18: **(retorno de uso real + reorganização da Fase 5)** linha de base **4h40** com CPU sempre ativa; AXP cortou antes de zerar e o RTC segurou a hora (registrado acima). Nova ordem da Fase 5: **dígitos grandes → 5.1 sono leve (≥1 dia) → IMU (levantar o braço) → 5.2 sono profundo (≥3 dias) → 5.3 ajuste fino (5 dias)**. Pedidos do dono: dígitos grandes, acender ao levantar o braço, meta de 5 dias no perfil típico. SPEC e ROADMAP atualizados.
 - 2026-11-17: **(Fase 1 resolvida)** bateria: no boot apareceu `carregando` a ~4213 mV e depois `parado/cheio`. A carga sobe a ~4,2 V e assenta em ~4,1 V em repouso (LiPo normal). **Não há teto em 4,1 V** — os 4110 mV com bateria cheia são tensão de repouso. Registrado em HARDWARE.md (AXP2101). Segue aberto só a **capacidade real** (400 mAh?).
 - 2026-11-17: **(bug do botão, corrigido)** antirrebote por "tempo desde o último clique" deixava o repique da **soltura** virar 2º clique em apertos longos. Trocado por antirrebote **por nível** (máquina de estado lê o GPIO após 30 ms). Fica de lição: debounce por nível é mais robusto que por janela de tempo.
 - 2026-11-17: tela ~1 min atrasada vs. notebook. **Esperado:** a semente do RTC é a hora de compilação (atraso do compilar/gravar/bootar). Correção é a **Fase 6 (NTP)**, que acerta o valor absoluto e grava no RTC. Não é bug do relógio.
