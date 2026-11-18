@@ -3,8 +3,7 @@
 > Atualizar ao **fim de cada sessão**. Primeira coisa que a IA lê, junto com `CLAUDE.md`.
 
 **Última atualização:** 2026-11-18
-**Fase atual:** 5 (dígitos grandes) concluída ✅ na placa → próxima: escada de bateria: **5.1 sono leve (≥1 dia)** → levantar o braço (IMU) → 5.2 sono profundo (≥3 dias) → 5.3 ajuste fino (5 dias). Ordem detalhada no ROADMAP.
-**Pendente (não commitado):** refino do relógio no [main/main.c](../main/main.c) — `hhmm_fortaleza` formata HH e MM separados com `snprintf("%02d")` em vez de cortar "HH:MM" com `'\0'`. Compila; aguarda flash/validação (mesma tela de agora) antes do commit.
+**Fase atual:** 5 (dígitos grandes) concluída ✅ na placa, incluindo o refino do relógio → próxima: escada de bateria: **5.1 sono leve (≥1 dia)** → levantar o braço (IMU) → 5.2 sono profundo (≥3 dias) → 5.3 ajuste fino (5 dias). Ordem detalhada no ROADMAP.
 
 ## Feito
 - Documentação inicial: CLAUDE.md, SPEC, HARDWARE, ROADMAP, DECISIONS, HANDOFF
@@ -55,8 +54,8 @@ Quando o RTC guarda uma hora errada mas marcada como válida (OS=0, ex.: resquí
 > A semente nasce alguns segundos atrasada (tempo de compilar/gravar). O NTP da Fase 6 corrige o valor absoluto.
 
 ## Próximo passo
-- **Refino do relógio (commit pendente):** `main.c` já formata HH/MM com `snprintf("%02d")` (compila); falta flash/validação (mesma tela) para então commitar.
-- **Depois, a escada de bateria** (cada degrau mede o consumo real e anota em `HARDWARE.md` antes de avançar):
+- **Fase 5.1 — sono leve (≥1 dia):** fazer a CPU dormir entre eventos com a tela apagada; medir o consumo e anotar em `HARDWARE.md`. Ponto de partida a superar: linha de base 4h40 (abaixo).
+- **Depois, o resto da escada de bateria** (cada degrau mede o consumo real e anota em `HARDWARE.md` antes de avançar):
   - **5.1 sono leve** (CPU dorme entre eventos, tela apagada) → autonomia ≥ 1 dia.
   - **Levantar o braço (IMU QMI8658)** → gesto acende a tela (entra antes do deep sleep).
   - **5.2 sono profundo** (deep sleep) acordando por **BOOT / alarme RTC / IMU** → autonomia ≥ 3 dias.
